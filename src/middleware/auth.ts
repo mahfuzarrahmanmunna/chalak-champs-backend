@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 // import { auth } from '../config/firebase';
+// import { auth } from '../config/firebase';
 import User, { IUser } from '../models/User';
 
 export interface AuthRequest extends Request {
