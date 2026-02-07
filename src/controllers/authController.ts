@@ -3,6 +3,10 @@ import { auth } from "../config/firebase";
 import User from "../models/User";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middleware/auth";
+import {
+  sendVerificationEmail,
+  verifyEmailCode as verifyEmailCodeUtil,
+} from "../utils/emailService";
 
 // Send verification code for phone number
 export const sendPhoneVerification = async (
@@ -65,6 +69,81 @@ export const verifyPhoneCode = async (
   }
 };
 
+// Send verification code for email
+export const sendEmailVerification = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      res.status(400).json({ success: false, message: "Email is required" });
+      return;
+    }
+
+    // Send verification email
+    const result = await sendVerificationEmail(email);
+
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        message: "Verification code sent to your email",
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.message || "Failed to send verification email",
+      });
+    }
+  } catch (error: any) {
+    console.error("Error sending email verification:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send verification email",
+    });
+  }
+};
+
+// Verify email code
+export const verifyEmailCode = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      res.status(400).json({
+        success: false,
+        message: "Email and verification code are required",
+      });
+      return;
+    }
+
+    // Verify the email code
+    const result = await verifyEmailCodeUtil(email, code);
+
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        message: "Email verified successfully",
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message || "Invalid verification code",
+      });
+    }
+  } catch (error: any) {
+    console.error("Error verifying email code:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to verify email code",
+    });
+  }
+};
+
 // Register user
 export const register = async (
   req: AuthRequest,
@@ -90,10 +169,10 @@ export const register = async (
     // Create new user
     const user = new User({
       uid,
-      firstName,
-      lastName,
-      email,
-      phoneNumber,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email?.toLowerCase().trim() || null,
+      phoneNumber: phoneNumber?.trim() || null,
       role: role || "student",
     });
 
@@ -121,6 +200,29 @@ export const register = async (
     });
   } catch (error: any) {
     console.error("Error registering user:", error);
+
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue)[0];
+      res.status(400).json({
+        success: false,
+        message: `${field} is already in use`,
+      });
+      return;
+    }
+
+    // Handle validation error
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map(
+        (err: any) => err.message,
+      );
+      res.status(400).json({
+        success: false,
+        message: messages.join(", "),
+      });
+      return;
+    }
+
     res.status(500).json({
       success: false,
       message: error.message || "Failed to register user",
@@ -135,7 +237,7 @@ export const getProfile = async (
 ): Promise<void> => {
   try {
     if (!req.user) {
-      res.status(401).json({ message: "Unauthorized" });
+      res.status(401).json({ success: false, message: "Unauthorized" });
       return;
     }
 

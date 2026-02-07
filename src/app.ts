@@ -11,7 +11,13 @@ const app = express();
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+// Configure CORS to allow requests from your frontend
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -32,8 +38,8 @@ app.use(
   },
 );
 
-// 404 handler
-app.use("*", (req, res) => {
+// 404 handler - Use a proper middleware function instead of wildcard route
+app.use((req, res, next) => {
   res.status(404).json({ message: "Route not found" });
 });
 

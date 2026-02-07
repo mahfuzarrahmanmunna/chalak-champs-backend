@@ -1,7 +1,7 @@
+// src/config/database.ts
 import mongoose from "mongoose";
 import * as dotenv from "dotenv";
-// const mongoose = require('mongoose')
-// const dotenv = require('dotenv')
+
 dotenv.config();
 
 export const connectDB = async (): Promise<void> => {
@@ -10,6 +10,12 @@ export const connectDB = async (): Promise<void> => {
     if (!mongoURI) {
       throw new Error("MongoDB URI is not defined in environment variables");
     }
+
+    // Set mongoose options to avoid warnings
+    mongoose.set('strictQuery', false);
+    
+    // Increase the max listeners to avoid warnings
+    mongoose.connection.setMaxListeners(20);
 
     await mongoose.connect(mongoURI);
     console.log("MongoDB connected successfully");

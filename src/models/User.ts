@@ -1,3 +1,4 @@
+// models/User.ts
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface IUser extends Document {
@@ -14,8 +15,22 @@ export interface IUser extends Document {
 const UserSchema: Schema = new Schema(
   {
     uid: { type: String, required: true, unique: true },
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
+    firstName: {
+      type: String,
+      required: function (this: IUser) {
+        // Only require firstName if not a temporary Firebase user
+        return !this.uid.startsWith("temp_");
+      },
+      default: "",
+    },
+    lastName: {
+      type: String,
+      required: function (this: IUser) {
+        // Only require lastName if not a temporary Firebase user
+        return !this.uid.startsWith("temp_");
+      },
+      default: "",
+    },
     email: { type: String },
     phoneNumber: { type: String },
     role: { type: String, default: "student" },
