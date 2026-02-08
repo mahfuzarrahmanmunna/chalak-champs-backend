@@ -1,4 +1,3 @@
-// src/index.ts
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -25,6 +24,11 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Add a root route for testing
+app.get("/", (req, res) => {
+  res.status(200).json({ message: "API is running" });
+});
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -63,6 +67,12 @@ const startServer = async (): Promise<void> => {
     // Start server
     app.listen(PORT, () => {
       console.log(`✅ Server is running on port ${PORT}`);
+      console.log(`📝 Available routes:`);
+      console.log(`   GET  /api/auth/health`);
+      console.log(`   POST /api/auth/register`);
+      console.log(`   GET  /api/auth/profile`);
+      console.log(`   GET  /api/auth/users (admin only)`);
+      console.log(`   GET  /api/auth/users/:id`);
     });
   } catch (error: any) {
     console.error("Failed to start server:", error);

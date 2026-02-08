@@ -1,4 +1,5 @@
-// models/User.ts
+// src/models/User.ts
+
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface IUser extends Document {
@@ -31,8 +32,16 @@ const UserSchema: Schema = new Schema(
       },
       default: "",
     },
-    email: { type: String },
-    phoneNumber: { type: String },
+    email: {
+      type: String,
+      sparse: true,
+      unique: true,
+    },
+    phoneNumber: {
+      type: String,
+      sparse: true,
+      unique: true,
+    },
     role: { type: String, default: "student" },
   },
   {
