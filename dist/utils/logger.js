@@ -7,7 +7,6 @@ exports.logDebug = exports.logWarn = exports.logInfo = exports.logError = export
 // src/utils/logger.ts
 const winston_1 = __importDefault(require("winston"));
 const path_1 = __importDefault(require("path"));
-// Define log levels
 const levels = {
     error: 0,
     warn: 1,
@@ -15,7 +14,6 @@ const levels = {
     http: 3,
     debug: 4,
 };
-// Define colors for each level
 const colors = {
     error: "red",
     warn: "yellow",
@@ -23,31 +21,21 @@ const colors = {
     http: "magenta",
     debug: "white",
 };
-// Tell winston that you want to link the colors
 winston_1.default.addColors(colors);
-// Define which level to log based on environment
 const level = () => {
     const env = process.env.NODE_ENV || "development";
-    const isDevelopment = env === "development";
-    return isDevelopment ? "debug" : "warn";
+    return env === "development" ? "debug" : "warn";
 };
-// Define format for logs
 const format = winston_1.default.format.combine(winston_1.default.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss:ms" }), winston_1.default.format.colorize({ all: true }), winston_1.default.format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`));
-// Define transports
-const transports = [
-    // Console transport
-    new winston_1.default.transports.Console(),
-    // File transport for errors
-    new winston_1.default.transports.File({
+const transports = [new winston_1.default.transports.Console()];
+if (process.env.NODE_ENV !== "production") {
+    transports.push(new winston_1.default.transports.File({
         filename: path_1.default.join("logs", "error.log"),
         level: "error",
-    }),
-    // File transport for all logs
-    new winston_1.default.transports.File({
+    }), new winston_1.default.transports.File({
         filename: path_1.default.join("logs", "combined.log"),
-    }),
-];
-// Create the logger
+    }));
+}
 exports.logger = winston_1.default.createLogger({
     level: level(),
     levels,
@@ -55,13 +43,11 @@ exports.logger = winston_1.default.createLogger({
     transports,
     exitOnError: false,
 });
-// Create a stream object for Morgan HTTP logger
 exports.morganStream = {
     write: (message) => {
         exports.logger.http(message.trim());
     },
 };
-// Helper functions for logging
 const logError = (message, error) => {
     exports.logger.error(message, error);
 };
