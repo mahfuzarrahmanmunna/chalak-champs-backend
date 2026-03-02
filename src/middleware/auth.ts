@@ -62,3 +62,24 @@ export const authenticate = async (
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+/** Alias for authenticate - use as protect on protected routes */
+export const protect = authenticate;
+
+/** Restrict access to given roles. Use after protect/authenticate. */
+export const authorize =
+  (...allowedRoles: string[]) =>
+  (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      res.status(403).json({ message: "Forbidden: insufficient role" });
+      return;
+    }
+    next();
+  };
+
+// Backward-compatible alias for existing routes expecting authenticateToken
+export const authenticateToken = authenticate;

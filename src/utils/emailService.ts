@@ -1,12 +1,12 @@
-import nodemailer from 'nodemailer';
-import crypto from 'crypto';
+import nodemailer from "nodemailer";
+import crypto from "crypto";
 
 // In-memory storage for verification codes (in production, use Redis or a database)
 const verificationCodes: Record<string, { code: string; expiresAt: Date }> = {};
 
 // Create a transporter object using SMTP transport
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  service: "gmail",
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -14,20 +14,22 @@ const transporter = nodemailer.createTransport({
 });
 
 // Generate a 6-digit verification code
-const generateVerificationCode = (): string => {
+export const generateVerificationCode = (): string => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 // Send verification email
-export const sendVerificationEmail = async (email: string): Promise<{ success: boolean; message?: string }> => {
+export const sendVerificationEmail = async (
+  email: string,
+): Promise<{ success: boolean; message?: string }> => {
   try {
     // Generate a verification code
     const code = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Code expires in 10 minutes
-    
+
     // Store the code with expiration
     verificationCodes[email] = { code, expiresAt };
-    
+
     // Create professional email HTML
     const emailHTML = `
       <!DOCTYPE html>
@@ -123,50 +125,56 @@ export const sendVerificationEmail = async (email: string): Promise<{ success: b
       </body>
       </html>
     `;
-    
+
     // Send email
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
-      subject: 'Chalak Champs - Email Verification',
+      subject: "Chalak Champs - Email Verification",
       html: emailHTML,
     });
-    
+
     return { success: true };
   } catch (error) {
-    console.error('Error sending verification email:', error);
-    return { success: false, message: 'Failed to send verification email' };
+    console.error("Error sending verification email:", error);
+    return { success: false, message: "Failed to send verification email" };
   }
 };
 
 // Verify email code
-export const verifyEmailCode = async (email: string, code: string): Promise<{ success: boolean; message?: string }> => {
+export const verifyEmailCode = async (
+  email: string,
+  code: string,
+): Promise<{ success: boolean; message?: string }> => {
   try {
     // Check if verification code exists for this email
     const storedData = verificationCodes[email];
-    
+
     if (!storedData) {
-      return { success: false, message: 'No verification code found for this email' };
+      return {
+        success: false,
+        message: "No verification code found for this email",
+      };
     }
-    
+
     // Check if code has expired
     if (new Date() > storedData.expiresAt) {
       // Remove expired code
       delete verificationCodes[email];
-      return { success: false, message: 'Verification code has expired' };
+      return { success: false, message: "Verification code has expired" };
     }
-    
+
     // Check if code matches
     if (storedData.code !== code) {
-      return { success: false, message: 'Invalid verification code' };
+      return { success: false, message: "Invalid verification code" };
     }
-    
+
     // Remove verified code
     delete verificationCodes[email];
-    
+
     return { success: true };
   } catch (error) {
-    console.error('Error verifying email code:', error);
-    return { success: false, message: 'Failed to verify email code' };
+    console.error("Error verifying email code:", error);
+    return { success: false, message: "Failed to verify email code" };
   }
 };

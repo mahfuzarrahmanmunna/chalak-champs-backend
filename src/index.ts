@@ -1,3 +1,4 @@
+// src/index.ts
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -5,6 +6,7 @@ import morgan from "morgan";
 import * as dotenv from "dotenv";
 import mongoose from "mongoose";
 import authRoutes from "./routes/auth";
+import courseRoutes from "./routes/courses";
 
 dotenv.config();
 
@@ -13,25 +15,24 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+// Log every request path to terminal so you can see which path was hit
+app.use((req, res, next) => {
+  console.log(`>>> ${req.method} ${req.originalUrl || req.path}`);
+  next();
+});
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Add a root route for testing
-app.get("/", (req, res) => {
-  res.status(200).json({ message: "API is running" });
-});
-
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/courses", courseRoutes);
 
 // Error handling middleware
 app.use(
@@ -53,31 +54,34 @@ app.use((req, res, next) => {
 
 // Connect to MongoDB and start server
 const startServer = async (): Promise<void> => {
-  try {
-    // Connect to MongoDB
-    const mongoURI = process.env.MONGODB_URI;
-    if (!mongoURI) {
-      throw new Error("MongoDB URI is not defined in environment variables");
+  const allowStartWithoutDb = process.env.ALLOW_START_WITHOUT_DB === "true";
+
+  const mongoURI = process.env.MONGODB_URI;
+  if (!mongoURI) {
+    console.error("MongoDB URI is not defined in .env");
+    if (!allowStartWithoutDb) process.exit(1);
+  } else {
+    try {
+      mongoose.set("strictQuery", false);
+      await mongoose.connect(mongoURI);
+      console.log("MongoDB connected successfully");
+    } catch (error: any) {
+      console.error("MongoDB connection failed:", error?.message || error);
+      if (error?.name === "MongooseServerSelectionError" || error?.message?.includes("whitelist")) {
+        console.error("\n--- MongoDB Atlas: whitelist your IP ---");
+        console.error("  https://cloud.mongodb.com → Network Access → Add IP Address (or 0.0.0.0/0 for dev)");
+        console.error("  Or use local MongoDB: MONGODB_URI=mongodb://localhost:27017/langual-academy\n");
+      }
+      if (!allowStartWithoutDb) {
+        process.exit(1);
+      }
+      console.warn("⚠️  Server starting WITHOUT database (ALLOW_START_WITHOUT_DB=true). API routes that need DB will fail.\n");
     }
-
-    mongoose.set("strictQuery", false);
-    await mongoose.connect(mongoURI);
-    console.log("MongoDB connected successfully");
-
-    // Start server
-    app.listen(PORT, () => {
-      console.log(`✅ Server is running on port ${PORT}`);
-      console.log(`📝 Available routes:`);
-      console.log(`   GET  /api/auth/health`);
-      console.log(`   POST /api/auth/register`);
-      console.log(`   GET  /api/auth/profile`);
-      console.log(`   GET  /api/auth/users (admin only)`);
-      console.log(`   GET  /api/auth/users/:id`);
-    });
-  } catch (error: any) {
-    console.error("Failed to start server:", error);
-    process.exit(1);
   }
+
+  app.listen(PORT, () => {
+    console.log(`✅ Server is running on port ${PORT}`);
+  });
 };
 
 startServer();

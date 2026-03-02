@@ -450,9 +450,20 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Verify email and password with Firebase
     try {
-      const userRecord = await auth.getUserByEmail(email);
+      const userCredential = await auth.signInWithEmailAndPassword(
+        email,
+        password,
+      );
+      const userRecord = userCredential.user;
+
+      if (!userRecord) {
+        res.status(401).json({
+          success: false,
+          message: "Authentication failed",
+        });
+        return;
+      }
 
       // Get user from our database
       const user = await User.findOne({ uid: userRecord.uid });
@@ -486,10 +497,21 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         },
       });
     } catch (firebaseError: any) {
-      console.error("Firebase error:", firebaseError);
+      console.error("Firebase auth error:", firebaseError);
+
+      // Handle specific Firebase errors
+      let message = "Invalid email or password";
+      if (firebaseError.code === "auth/user-not-found") {
+        message = "User not found";
+      } else if (firebaseError.code === "auth/wrong-password") {
+        message = "Incorrect password";
+      } else if (firebaseError.code === "auth/too-many-requests") {
+        message = "Too many failed attempts. Please try again later";
+      }
+
       res.status(401).json({
         success: false,
-        message: "Invalid email or password",
+        message,
       });
     }
   } catch (error: any) {
