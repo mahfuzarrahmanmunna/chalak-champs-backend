@@ -1,3 +1,4 @@
+// src/routes/admin.ts
 import express from "express";
 import {
   getUsers,
@@ -7,20 +8,18 @@ import {
   bulkDeleteUsers,
   createUserByAdmin,
   getUserStats,
+  getRecentCourses, // <--- Import the new controller
 } from "../controllers/adminController";
 import { validateUser } from "../middleware/validation";
-import { requireAdmin } from "../middleware/roleAuth";
-import { authenticateToken } from "../middleware/auth";
-// import { authenticateToken, requireAdmin } from "../middleware/auth";
-// import { validateUser } from "../middleware/validation";
+import { authenticateToken, authorize } from "../middleware/auth";
 
 const router = express.Router();
 
-// All admin routes require authentication and admin role
+// Middleware
 router.use(authenticateToken);
-router.use(requireAdmin);
+router.use(authorize("admin"));
 
-// User management routes
+// User Management Routes
 router.get("/users", getUsers);
 router.get("/users/:id", getUserById);
 router.post("/users", validateUser, createUserByAdmin);
@@ -28,7 +27,12 @@ router.put("/users/:id", validateUser, updateUser);
 router.delete("/users/:id", deleteUser);
 router.delete("/users/bulk", bulkDeleteUsers);
 
-// Statistics route
-router.get("/stats", getUserStats);
+// Dashboard / Stats Routes
+// Frontend calls: /api/admin/dashboard/stats
+router.get("/dashboard/stats", getUserStats);
+
+// NEW: Route for recent courses
+// Frontend calls: /api/admin/courses?limit=5
+router.get("/courses", getRecentCourses);
 
 export default router;

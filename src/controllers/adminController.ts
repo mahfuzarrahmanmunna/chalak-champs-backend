@@ -1,8 +1,14 @@
+// src/controllers/adminController.ts
 import { Request, Response } from "express";
 import User from "../models/User";
+import Course from "../models/Course";
 import mongoose from "mongoose";
 import { sendVerificationEmail } from "../utils/emailService";
 import { sendPhoneVerification } from "../utils/phoneService";
+
+// ==========================================
+// USER MANAGEMENT CONTROLLERS
+// ==========================================
 
 // Get all users with pagination and search
 export const getUsers = async (req: Request, res: Response): Promise<void> => {
@@ -54,16 +60,14 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json({
       success: true,
-      data: {
-        users,
-        pagination: {
-          currentPage: page,
-          totalPages,
-          totalCount,
-          limit,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
-        },
+      users: users,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalCount,
+        limit,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
       },
     });
   } catch (error: any) {
@@ -103,7 +107,7 @@ export const getUserById = async (
 
     res.status(200).json({
       success: true,
-      data: { user },
+      user: user,
     });
   } catch (error: any) {
     console.error("Error fetching user:", error);
@@ -167,7 +171,7 @@ export const createUserByAdmin = async (
     res.status(201).json({
       success: true,
       message: "User created successfully",
-      data: { user },
+      user: user,
     });
   } catch (error: any) {
     console.error("Error creating user:", error);
@@ -233,7 +237,7 @@ export const updateUser = async (
     res.status(200).json({
       success: true,
       message: "User updated successfully",
-      data: { user },
+      user: user,
     });
   } catch (error: any) {
     console.error("Error updating user:", error);
@@ -269,9 +273,6 @@ export const deleteUser = async (
       });
       return;
     }
-
-    // TODO: Also delete user from Firebase if needed
-    // await auth.deleteUser(user.uid);
 
     res.status(200).json({
       success: true,
@@ -323,7 +324,7 @@ export const bulkDeleteUsers = async (
     res.status(200).json({
       success: true,
       message: `Successfully deleted ${result.deletedCount} users`,
-      data: { deletedCount: result.deletedCount },
+      deletedCount: result.deletedCount,
     });
   } catch (error: any) {
     console.error("Error bulk deleting users:", error);
@@ -334,12 +335,17 @@ export const bulkDeleteUsers = async (
   }
 };
 
-// Get user statistics
+// ==========================================
+// DASHBOARD STATISTICS & COURSES
+// ==========================================
+
+// Get user statistics (Updated to include Courses)
 export const getUserStats = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
   try {
+    // 1. Fetch User Stats
     const [
       totalUsers,
       adminUsers,
@@ -383,14 +389,49 @@ export const getUserStats = async (
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
+    // 2. Fetch Course Stats
+    let totalCourses = 0;
+    let activeCourses = 0;
+    let totalLessons = 0;
+
+    try {
+      totalCourses = await Course.countDocuments();
+      activeCourses = await Course.countDocuments({ status: "active" });
+
+      // FIX: Cast 'course' to 'any' to avoid TypeScript error if 'lessons' is missing from ICourse interface
+      const coursesWithLessons = await Course.find({
+        lessons: { $exists: true, $ne: [] },
+      });
+
+      totalLessons = coursesWithLessons.reduce((acc, course: any) => {
+        return acc + (course.lessons ? course.lessons.length : 0);
+      }, 0);
+    } catch (err) {
+      console.warn("Course model not found or error fetching courses:", err);
+    }
+
+    // 3. Calculate new users this month
+    const startOfMonth = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      1,
+    );
+    const newUsersThisMonth = await User.countDocuments({
+      createdAt: { $gte: startOfMonth },
+    });
+
     res.status(200).json({
       success: true,
-      data: {
+      stats: {
         totalUsers,
+        totalCourses,
+        totalRevenue: 0, // TODO: Implement Payment logic
+        totalLessons,
+        newUsersThisMonth,
+        activeCourses,
+        // Extras
         adminUsers,
         studentUsers,
-        verifiedEmailUsers,
-        verifiedPhoneUsers,
         recentUsers,
         monthlyStats,
       },
@@ -400,6 +441,33 @@ export const getUserStats = async (
     res.status(500).json({
       success: false,
       message: error.message || "Failed to fetch user statistics",
+    });
+  }
+};
+
+// Get Recent Courses for Dashboard
+export const getRecentCourses = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 5;
+
+    // Fetch recent courses
+    const courses = await Course.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select("title instructor thumbnail status createdAt");
+
+    res.status(200).json({
+      success: true,
+      courses: courses,
+    });
+  } catch (error: any) {
+    console.error("Error fetching courses:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch courses",
     });
   }
 };

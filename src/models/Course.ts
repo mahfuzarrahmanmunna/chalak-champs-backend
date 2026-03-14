@@ -1,25 +1,24 @@
-// src/models/Course.ts
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface ICourse extends Document {
   title: string;
-  titleBn?: string;
   description: string;
-  descriptionBn?: string;
   category: string;
   level: "beginner" | "intermediate" | "advanced";
   language: "en" | "bn";
   price: number;
-  thumbnail?: string;
-  videoUrl?: string;
-  duration?: number; // in minutes
-  status: "draft" | "published" | "archived";
-  isPublished: boolean;
-  publishedAt?: Date;
+  originalPrice?: number;
   instructor: mongoose.Types.ObjectId;
+  duration: string; // "12" (hours)
+  publishDate: Date;
+  startDate: Date;
   tags: string[];
   objectives: string[];
   requirements: string[];
+  thumbnail?: string;
+  videoUrl?: string;
+  isPublished: boolean;
+  publishedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,35 +29,28 @@ const CourseSchema: Schema = new Schema(
       type: String,
       required: [true, "Title is required"],
       trim: true,
-      minlength: [3, "Title must be at least 3 characters"],
-    },
-    titleBn: {
-      type: String,
-      trim: true,
     },
     description: {
       type: String,
       required: [true, "Description is required"],
-      minlength: [10, "Description must be at least 10 characters"],
-    },
-    descriptionBn: {
-      type: String,
-      trim: true,
     },
     category: {
       type: String,
-      required: [true, "Category is required"],
+      required: true,
       enum: [
-        "competition-prep",
-        "language",
-        "school-subjects",
-        "skill-development",
-        "other",
+        "Grammar",
+        "Business",
+        "Test Preparation",
+        "Speaking",
+        "Writing",
+        "Literature",
+        "Vocabulary",
+        "Other",
       ],
     },
     level: {
       type: String,
-      required: [true, "Level is required"],
+      required: true,
       enum: ["beginner", "intermediate", "advanced"],
     },
     language: {
@@ -69,32 +61,26 @@ const CourseSchema: Schema = new Schema(
     price: {
       type: Number,
       required: true,
-      min: [0, "Price must be non-negative"],
-      default: 0,
-    },
-    thumbnail: {
-      type: String,
-    },
-    videoUrl: {
-      type: String,
-    },
-    duration: {
-      type: Number,
       min: 0,
     },
-    status: {
-      type: String,
-      enum: ["draft", "published", "archived"],
-      default: "draft",
+    originalPrice: {
+      type: Number,
     },
-    isPublished: {
-      type: Boolean,
-      default: false,
-    },
-    publishedAt: { type: Date },
     instructor: {
       type: Schema.Types.ObjectId,
       ref: "User",
+      required: true,
+    },
+    duration: {
+      type: String, // or Number if you prefer total hours
+      required: true,
+    },
+    publishDate: {
+      type: Date,
+      required: true,
+    },
+    startDate: {
+      type: Date,
       required: true,
     },
     tags: [
@@ -115,20 +101,27 @@ const CourseSchema: Schema = new Schema(
         trim: true,
       },
     ],
+    thumbnail: {
+      type: String,
+    },
+    videoUrl: {
+      type: String,
+    },
+    isPublished: {
+      type: Boolean,
+      default: false,
+    },
+    publishedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
   },
 );
 
-// Index for search functionality
-CourseSchema.index({
-  title: "text",
-  description: "text",
-  titleBn: "text",
-  descriptionBn: "text",
-});
+// Index for search
+CourseSchema.index({ title: "text", description: "text", tags: "text" });
 
 const Course = mongoose.model<ICourse>("Course", CourseSchema);
 export default Course;
-export { Course };

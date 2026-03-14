@@ -1,6 +1,5 @@
-// src/utils/cloudinary.ts
 import cloudinary from "cloudinary";
-import { AppError } from "../middleware/errorHandler";
+import fs from "fs";
 
 // Configure Cloudinary
 cloudinary.v2.config({
@@ -9,28 +8,33 @@ cloudinary.v2.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Upload file to Cloudinary
+// Generic Upload Function
 export const uploadToCloudinary = async (
   filePath: string,
   folder: string,
-): Promise<cloudinary.UploadApiResponse> => {
+  resourceType: "image" | "video" | "auto",
+): Promise<string> => {
   try {
     const result = await cloudinary.v2.uploader.upload(filePath, {
       folder,
-      resource_type: "auto", // Automatically detect resource type
+      resource_type: resourceType,
+      chunk_size: 6000000, // Useful for large videos
     });
 
-    return result;
+    return result.secure_url;
   } catch (error: any) {
-    throw new AppError(`Failed to upload file: ${error.message}`, 500);
+    console.error("Cloudinary Upload Error:", error);
+    throw new Error(`Failed to upload ${resourceType} to Cloudinary`);
   }
 };
 
-// Delete file from Cloudinary
-export const deleteFromCloudinary = async (publicId: string): Promise<void> => {
+// Delete local file helper
+export const deleteLocalFile = (filePath: string) => {
   try {
-    await cloudinary.v2.uploader.destroy(publicId);
-  } catch (error: any) {
-    throw new AppError(`Failed to delete file: ${error.message}`, 500);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (err) {
+    console.error("Error deleting local file:", err);
   }
 };

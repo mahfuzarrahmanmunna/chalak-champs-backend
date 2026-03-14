@@ -1,11 +1,12 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lingual-academy", // Changed from "chalak-champs-client" to match the service binding
+  "name": "lingual-academy",
   "compatibility_date": "2025-09-27",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
   },
+  "main": "dist/index.js",
   "assets": {
     "binding": "ASSETS",
   },

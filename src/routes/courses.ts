@@ -2,57 +2,73 @@
 import express from "express";
 import {
   createCourse,
-  deleteCourse,
-  getCourseById,
   getCourses,
-  getCoursesByInstructor,
-  publishCourse,
-  unpublishCourse,
+  getCourseById,
   updateCourse,
+  deleteCourse,
+  getInstructorCourses,
 } from "../controllers/CourseController";
 import { protect, authorize } from "../middleware/auth";
-import { uploadCourseFiles } from "../middleware/upload";
-import { validateCourse } from "../middleware/validation";
+import multer from "multer";
+import path from "path";
+import moduleRoutes from "./moduleRoutes";
+
+// Multer Config
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (file.fieldname === "thumbnail") cb(null, "uploads/images/");
+    else if (file.fieldname === "video") cb(null, "uploads/videos/");
+    else cb(null, "uploads/misc/");
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(
+      null,
+      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
+    );
+  },
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+});
 
 const router = express.Router();
 
-// Public routes
+// Public Routes
 router.get("/", getCourses);
 router.get("/:id", getCourseById);
+router.use("/:courseId/modules", moduleRoutes);
 
-// Protected routes
-router.use(protect); // All routes below this require authentication
+// --- PROTECTED ROUTES ---
+router.use(protect); // All routes below this line require authentication
 
-// Instructor routes
+router.get("/instructor/my-courses", getInstructorCourses);
+
+// Create Course
 router.post(
   "/",
-  authorize("instructor", "admin"),
-  uploadCourseFiles,
-  validateCourse,
+  authorize("instructor", "admin"), // Requires specific role
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
   createCourse,
 );
 
-router.get(
-  "/instructor/my-courses",
-  authorize("instructor", "admin"),
-  getCoursesByInstructor,
-);
-
+// Update Course
 router.put(
   "/:id",
   authorize("instructor", "admin"),
-  uploadCourseFiles,
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
   updateCourse,
 );
 
+// Delete Course
 router.delete("/:id", authorize("instructor", "admin"), deleteCourse);
-
-router.patch("/:id/publish", authorize("instructor", "admin"), publishCourse);
-
-router.patch(
-  "/:id/unpublish",
-  authorize("instructor", "admin"),
-  unpublishCourse,
-);
 
 export default router;

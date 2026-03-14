@@ -1,107 +1,100 @@
-// src/controllers/courseController.ts
-import { Request, Response, NextFunction } from "express";
-import { Course, ICourse } from "../models/Course";
+import { Response, NextFunction } from "express";
 import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
-import { uploadToCloudinary } from "../utils/cloudinary";
-import fs from "fs";
+import { uploadToCloudinary, deleteLocalFile } from "../utils/cloudinary";
+import cloudinary from "cloudinary";
+import Course from "../models/Course";
 
-/** Type for multer file fields (we only use .path) */
+// Type for Multer files
 type MulterFiles = { [fieldname: string]: { path: string }[] };
-
-/** Request with optional files (set by upload middleware). Omit files to avoid clashing with Express.Multer typings. */
 type RequestWithFiles = Omit<AuthRequest, "files"> & { files?: MulterFiles };
 
-// @desc    Create a new course
-// @route   POST /api/courses
-// @access  Private (Instructor/Admin)
+// Helper: Extract Public ID from Cloudinary URL
+const getPublicId = (url: string) => {
+  const parts = url.split("/");
+  const file = parts[parts.length - 1];
+  return file.split(".")[0];
+};
+
+// --- CREATE ---
 export const createCourse = catchAsync(
   async (req: RequestWithFiles, res: Response, next: NextFunction) => {
-    const courseData = {
-      ...req.body,
-      instructor: req.user!._id,
-    };
+    const { user } = req;
+    const files = req.files as MulterFiles;
 
-    // Handle file uploads
-    if (req.files) {
-      const files = req.files as MulterFiles;
+    let thumbnailUrl: string | undefined;
+    let videoUrl: string | undefined;
 
-      if (files.thumbnail) {
-        const thumbnailPath = files.thumbnail[0].path;
-        const thumbnailResult = await uploadToCloudinary(
-          thumbnailPath,
-          "course-thumbnails",
+    try {
+      // 1. Handle Thumbnail
+      if (files && files.thumbnail) {
+        const path = files.thumbnail[0].path;
+        thumbnailUrl = await uploadToCloudinary(
+          path,
+          "course_thumbnails",
+          "image",
         );
-        courseData.thumbnail = thumbnailResult.secure_url;
-
-        // Delete local file after upload
-        fs.unlinkSync(thumbnailPath);
+        deleteLocalFile(path);
       }
 
-      if (files.video) {
-        const videoPath = files.video[0].path;
-        const videoResult = await uploadToCloudinary(
-          videoPath,
-          "course-videos",
-        );
-        courseData.introVideo = videoResult.secure_url;
-
-        // Delete local file after upload
-        fs.unlinkSync(videoPath);
+      // 2. Handle Video
+      if (files && files.video) {
+        const path = files.video[0].path;
+        videoUrl = await uploadToCloudinary(path, "course_videos", "video");
+        deleteLocalFile(path);
       }
+
+      // 3. Prepare Data
+      const courseData = {
+        ...req.body,
+        instructor: user?._id || req.body.instructor,
+        price: parseFloat(req.body.price),
+        originalPrice: req.body.originalPrice
+          ? parseFloat(req.body.originalPrice)
+          : undefined,
+        objectives: req.body.objectives ? JSON.parse(req.body.objectives) : [],
+        requirements: req.body.requirements
+          ? JSON.parse(req.body.requirements)
+          : [],
+        tags: req.body.tags
+          ? req.body.tags.split(",").map((t: string) => t.trim())
+          : [],
+        thumbnail: thumbnailUrl,
+        videoUrl: videoUrl,
+        isPublished: true,
+        publishedAt: new Date(),
+      };
+
+      const course = await Course.create(courseData);
+
+      res.status(201).json({
+        success: true,
+        data: course,
+        message: "Course created successfully",
+      });
+    } catch (error: any) {
+      if (files?.thumbnail) deleteLocalFile(files.thumbnail[0].path);
+      if (files?.video) deleteLocalFile(files.video[0].path);
+      return next(
+        new AppError(error.message || "Failed to create course", 500),
+      );
     }
-
-    const course = await Course.create(courseData);
-
-    res.status(201).json({
-      success: true,
-      data: course,
-      message: "Course created successfully",
-    });
   },
 );
 
-// @desc    Get all courses
-// @route   GET /api/courses
-// @access  Public
+// --- GET ALL ---
 export const getCourses = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const {
-      page = 1,
-      limit = 10,
-      category,
-      level,
-      language,
-      search,
-      sort = "-createdAt",
-      isPublished,
-    } = req.query;
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { search, category, level, page = 1, limit = 10 } = req.query;
 
-    // Build query
     const query: any = {};
 
-    if (isPublished !== undefined) {
-      query.isPublished = isPublished === "true";
-    }
-
-    if (category) {
-      query.category = category;
-    }
-
-    if (level) {
-      query.level = level;
-    }
-
-    if (language) {
-      query.language = language;
-    }
-
+    if (category) query.category = category;
+    if (level) query.level = level;
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: "i" } },
-        { titleBn: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
-        { descriptionBn: { $regex: search, $options: "i" } },
         { tags: { $in: [new RegExp(search as string, "i")] } },
       ];
     }
@@ -111,8 +104,8 @@ export const getCourses = catchAsync(
     const skip = (pageNum - 1) * limitNum;
 
     const courses = await Course.find(query)
-      .populate("instructor", "name email")
-      .sort(sort as string)
+      .populate("instructor", "name email avatar")
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum);
 
@@ -120,25 +113,20 @@ export const getCourses = catchAsync(
 
     res.status(200).json({
       success: true,
+      count: courses.length,
+      pagination: { page: pageNum, pages: Math.ceil(total / limitNum), total },
       data: courses,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum),
-      },
     });
   },
 );
 
-// @desc    Get single course by ID
-// @route   GET /api/courses/:id
-// @access  Public
+// --- GET ONE ---
 export const getCourseById = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const course = await Course.findById(req.params.id)
-      .populate("instructor", "name email bio")
-      .populate("lessons");
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const course = await Course.findById(req.params.id).populate(
+      "instructor",
+      "name email bio",
+    );
 
     if (!course) {
       return next(new AppError("Course not found", 404));
@@ -151,18 +139,14 @@ export const getCourseById = catchAsync(
   },
 );
 
-// @desc    Update course
-// @route   PUT /api/courses/:id
-// @access  Private (Instructor/Admin)
+// --- UPDATE ---
 export const updateCourse = catchAsync(
   async (req: RequestWithFiles, res: Response, next: NextFunction) => {
     let course = await Course.findById(req.params.id);
 
-    if (!course) {
-      return next(new AppError("Course not found", 404));
-    }
+    if (!course) return next(new AppError("Course not found", 404));
 
-    // Check if user is course instructor or admin
+    // Authorization Check
     if (
       course.instructor.toString() !== req.user!._id.toString() &&
       req.user!.role !== "admin"
@@ -170,35 +154,58 @@ export const updateCourse = catchAsync(
       return next(new AppError("Not authorized to update this course", 403));
     }
 
-    // Handle file uploads
-    const updateData = { ...req.body };
+    const files = req.files as MulterFiles;
+    const updateData: any = { ...req.body };
 
-    if (req.files) {
-      const files = req.files as MulterFiles;
+    // Handle Price conversion
+    if (req.body.price) updateData.price = parseFloat(req.body.price);
+    if (req.body.originalPrice)
+      updateData.originalPrice = parseFloat(req.body.originalPrice);
 
-      if (files.thumbnail) {
-        const thumbnailPath = files.thumbnail[0].path;
-        const thumbnailResult = await uploadToCloudinary(
-          thumbnailPath,
-          "course-thumbnails",
-        );
-        updateData.thumbnail = thumbnailResult.secure_url;
+    // Handle Arrays
+    if (req.body.objectives)
+      updateData.objectives = JSON.parse(req.body.objectives);
+    if (req.body.requirements)
+      updateData.requirements = JSON.parse(req.body.requirements);
+    if (req.body.tags)
+      updateData.tags = req.body.tags.split(",").map((t: string) => t.trim());
 
-        // Delete local file after upload
-        fs.unlinkSync(thumbnailPath);
+    // 1. Handle Thumbnail Update
+    if (files && files.thumbnail) {
+      // Delete old thumbnail from Cloudinary if it exists
+      if (course.thumbnail) {
+        const publicId = `course_thumbnails/${getPublicId(course.thumbnail)}`;
+        await cloudinary.v2.uploader.destroy(publicId);
       }
 
-      if (files.video) {
-        const videoPath = files.video[0].path;
-        const videoResult = await uploadToCloudinary(
-          videoPath,
-          "course-videos",
-        );
-        updateData.introVideo = videoResult.secure_url;
+      // Upload new
+      const path = files.thumbnail[0].path;
+      updateData.thumbnail = await uploadToCloudinary(
+        path,
+        "course_thumbnails",
+        "image",
+      );
+      deleteLocalFile(path);
+    }
 
-        // Delete local file after upload
-        fs.unlinkSync(videoPath);
+    // 2. Handle Video Update
+    if (files && files.video) {
+      // Delete old video
+      if (course.videoUrl) {
+        const publicId = `course_videos/${getPublicId(course.videoUrl)}`;
+        await cloudinary.v2.uploader.destroy(publicId, {
+          resource_type: "video",
+        });
       }
+
+      // Upload new
+      const path = files.video[0].path;
+      updateData.videoUrl = await uploadToCloudinary(
+        path,
+        "course_videos",
+        "video",
+      );
+      deleteLocalFile(path);
     }
 
     course = await Course.findByIdAndUpdate(req.params.id, updateData, {
@@ -214,23 +221,32 @@ export const updateCourse = catchAsync(
   },
 );
 
-// @desc    Delete course
-// @route   DELETE /api/courses/:id
-// @access  Private (Instructor/Admin)
+// --- DELETE ---
 export const deleteCourse = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     const course = await Course.findById(req.params.id);
 
-    if (!course) {
-      return next(new AppError("Course not found", 404));
-    }
+    if (!course) return next(new AppError("Course not found", 404));
 
-    // Check if user is course instructor or admin
+    // Authorization Check
     if (
       course.instructor.toString() !== req.user!._id.toString() &&
       req.user!.role !== "admin"
     ) {
       return next(new AppError("Not authorized to delete this course", 403));
+    }
+
+    // Delete Assets from Cloudinary
+    if (course.thumbnail) {
+      await cloudinary.v2.uploader.destroy(
+        `course_thumbnails/${getPublicId(course.thumbnail)}`,
+      );
+    }
+    if (course.videoUrl) {
+      await cloudinary.v2.uploader.destroy(
+        `course_videos/${getPublicId(course.videoUrl)}`,
+        { resource_type: "video" },
+      );
     }
 
     await Course.findByIdAndDelete(req.params.id);
@@ -242,105 +258,17 @@ export const deleteCourse = catchAsync(
   },
 );
 
-// @desc    Get courses by instructor
-// @route   GET /api/courses/instructor/my-courses
-// @access  Private (Instructor/Admin)
-export const getCoursesByInstructor = catchAsync(
+// --- GET COURSES BY INSTRUCTOR (My Courses) ---
+export const getInstructorCourses = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const {
-      page = 1,
-      limit = 10,
-      isPublished,
-      sort = "-createdAt",
-    } = req.query;
-
-    const query: any = { instructor: req.user!._id };
-
-    if (isPublished !== undefined) {
-      query.isPublished = isPublished === "true";
-    }
-
-    const pageNum = parseInt(page as string);
-    const limitNum = parseInt(limit as string);
-    const skip = (pageNum - 1) * limitNum;
-
-    const courses = await Course.find(query)
-      .sort(sort as string)
-      .skip(skip)
-      .limit(limitNum);
-
-    const total = await Course.countDocuments(query);
+    const courses = await Course.find({ instructor: req.user!._id }).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({
       success: true,
+      count: courses.length,
       data: courses,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum),
-      },
-    });
-  },
-);
-
-// @desc    Publish course
-// @route   PATCH /api/courses/:id/publish
-// @access  Private (Instructor/Admin)
-export const publishCourse = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const course = await Course.findById(req.params.id);
-
-    if (!course) {
-      return next(new AppError("Course not found", 404));
-    }
-
-    // Check if user is course instructor or admin
-    if (
-      course.instructor.toString() !== req.user!._id.toString() &&
-      req.user!.role !== "admin"
-    ) {
-      return next(new AppError("Not authorized to publish this course", 403));
-    }
-
-    course.isPublished = true;
-    course.publishedAt = new Date();
-    await course.save();
-
-    res.status(200).json({
-      success: true,
-      data: course,
-      message: "Course published successfully",
-    });
-  },
-);
-
-// @desc    Unpublish course
-// @route   PATCH /api/courses/:id/unpublish
-// @access  Private (Instructor/Admin)
-export const unpublishCourse = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const course = await Course.findById(req.params.id);
-
-    if (!course) {
-      return next(new AppError("Course not found", 404));
-    }
-
-    // Check if user is course instructor or admin
-    if (
-      course.instructor.toString() !== req.user!._id.toString() &&
-      req.user!.role !== "admin"
-    ) {
-      return next(new AppError("Not authorized to unpublish this course", 403));
-    }
-
-    course.isPublished = false;
-    await course.save();
-
-    res.status(200).json({
-      success: true,
-      data: course,
-      message: "Course unpublished successfully",
     });
   },
 );

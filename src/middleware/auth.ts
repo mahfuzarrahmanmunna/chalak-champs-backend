@@ -4,7 +4,7 @@ import { auth } from "../config/firebase";
 import User, { IUser } from "../models/User";
 
 export interface AuthRequest extends Request {
-  user?: IUser;
+  user?: IUser; // Expects IUser or undefined
 }
 
 export const authenticate = async (
@@ -26,35 +26,41 @@ export const authenticate = async (
       const decodedToken = await auth.verifyIdToken(idToken);
       const uid = decodedToken.uid;
 
-      // Check if user exists in our database
-      const user = await User.findOne({ uid });
+      // FIX 1: Use .lean() to return a plain JavaScript object instead of a Mongoose Document
+      // This fixes the "Type Document is not assignable to IUser" error
+      let user = await User.findOne({ uid }).lean<IUser>();
 
-      // For registration endpoint, we allow the request to proceed even if user doesn't exist
-      // The registration controller will handle creating the user
-      if (req.path === "/api/auth/register") {
-        // Create a temporary user object for the registration process
-        req.user = {
-          uid,
-          firstName: "",
-          lastName: "",
+      const isRegisterRoute = req.originalUrl.includes("/register");
+
+      if (!user && !isRegisterRoute) {
+        console.log(`[AUTH] Auto-provisioning user for UID: ${uid}`);
+
+        const fullName = decodedToken.name || "User";
+        const nameParts = fullName.split(" ");
+        const firstName = nameParts[0] || "User";
+        const lastName =
+          nameParts.length > 1 ? nameParts.slice(1).join(" ") : "User";
+
+        // Use .toObject() on the result if creating, or just assign since we are creating fresh
+        const createdUser = await User.create({
+          uid: uid,
           email: decodedToken.email || "",
+          firstName: firstName,
+          lastName: lastName,
           phoneNumber: decodedToken.phoneNumber || "",
           role: "student",
-        } as IUser;
-        next();
-        return;
+        });
+
+        user = createdUser.toObject() as IUser; // Convert to plain object
       }
 
-      // For other endpoints, user must exist
-      if (!user) {
-        res.status(401).json({ message: "Unauthorized: User not found" });
-        return;
-      }
+      // FIX 2: Convert null to undefined.
+      // Mongoose returns null if not found, but the interface expects undefined.
+      req.user = user || undefined;
 
-      req.user = user;
       next();
-    } catch (error) {
-      console.error("Firebase auth error:", error);
+    } catch (firebaseError) {
+      console.error("Firebase auth error:", firebaseError);
       res.status(401).json({ message: "Unauthorized: Invalid token" });
     }
   } catch (error) {
@@ -63,23 +69,21 @@ export const authenticate = async (
   }
 };
 
-/** Alias for authenticate - use as protect on protected routes */
+export const authenticateToken = authenticate;
 export const protect = authenticate;
 
-/** Restrict access to given roles. Use after protect/authenticate. */
 export const authorize =
-  (...allowedRoles: string[]) =>
+  (...roles: string[]) =>
   (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
-    if (!allowedRoles.includes(req.user.role)) {
-      res.status(403).json({ message: "Forbidden: insufficient role" });
+    if (!roles.includes(req.user.role)) {
+      res
+        .status(403)
+        .json({ message: `Forbidden: Role '${req.user.role}' is not allowed` });
       return;
     }
     next();
   };
-
-// Backward-compatible alias for existing routes expecting authenticateToken
-export const authenticateToken = authenticate;
