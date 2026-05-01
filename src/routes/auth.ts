@@ -1,49 +1,43 @@
-// src/routes/auth.ts
-
 import { Router } from "express";
 import { authenticate } from "../middleware/auth";
-import { authenticateForRegistration } from "../middleware/authForRegistration";
-import { requireAdmin } from "../middleware/roleAuth";
-import {
-  sendPhoneVerification,
-  verifyPhoneCode,
-  sendEmailVerification,
-  verifyEmailCode,
-  register,
-  getProfile,
-  verifyToken,
-  login,
-  getAllUsers,
-  getUserById,
-} from "../controllers/authController";
+import * as authController from "../controllers/authController";
 
 const router = Router();
 
-// Health check endpoint
-router.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok", message: "Server is running" });
-});
+// ================= PUBLIC ROUTES ==================
 
-// Public routes
-router.post("/send-phone-verification", sendPhoneVerification);
-router.post("/verify-phone-code", verifyPhoneCode);
-router.post("/send-email-verification", sendEmailVerification);
-router.post("/verify-email-code", verifyEmailCode);
+// 1. Send Phone Verification Code
+router.post("/send-phone-verification", authController.sendPhoneVerification);
 
-// Authentication routes
-router.post("/login", login);
-router.post("/verify", verifyToken); // Add this line for POST /verify
+// 2. Verify Phone Code
+router.post("/verify-phone-code", authController.verifyPhoneCode);
 
-// Registration route - use special middleware
-router.post("/register", authenticateForRegistration, register);
+// 3. Send Email Verification Code
+router.post("/send-email-verification", authController.sendEmailVerification);
 
-// Protected routes (require existing user)
-router.use(authenticate);
-router.get("/profile", getProfile);
-router.get("/verify", verifyToken); // Keep the GET version for backward compatibility
+// 4. Verify Email Code
+router.post("/verify-email-code", authController.verifyEmailCode);
 
-// Admin routes
-router.get("/users", requireAdmin, getAllUsers);
-router.get("/users/:id", getUserById);
+// 5. Login
+router.post("/login", authController.login);
+
+// ================= PROTECTED ROUTES ==================
+// Note: We apply the 'authenticate' middleware here because the controller
+// functions (like 'register' and 'getProfile') expect 'req.user' to be populated.
+
+// 6. Register User
+router.post("/register", authenticate, authController.register);
+
+// 7. Get Current User Profile
+router.get("/profile", authenticate, authController.getProfile);
+
+// 8. Verify Token Status
+router.post("/verify", authenticate, authController.verifyToken);
+
+// 9. Get All Users (Admin/Protected)
+router.get("/users", authenticate, authController.getAllUsers);
+
+// 10. Get User By ID
+router.get("/users/:id", authenticate, authController.getUserById);
 
 export default router;

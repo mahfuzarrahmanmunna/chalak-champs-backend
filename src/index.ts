@@ -63,6 +63,7 @@ app.use("/api/courses", courseRoutes);
 app.use("/api/admin", adminRoutes);
 // 2. REGISTER THE ROUTE HERE (After middleware!)
 app.use("/api/contact", contactSheetRoutes);
+app.use("/api/auth", authRoutes); // <--- The router is mounted at '/api/auth'
 
 // Health Check
 app.get("/health", (req, res) => {

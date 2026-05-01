@@ -1,111 +1,74 @@
 import mongoose, { Document, Schema } from "mongoose";
 
+// 1. Define the interface extending Document
+// Ensure all properties used in CourseController are listed here
 export interface ICourse extends Document {
+  _id: mongoose.Types.ObjectId;
   title: string;
   description: string;
-  category: string;
-  level: "beginner" | "intermediate" | "advanced";
-  language: "en" | "bn";
+  instructor: mongoose.Types.ObjectId; // <--- Missing in your file
   price: number;
   originalPrice?: number;
-  instructor: mongoose.Types.ObjectId;
-  duration: string; // "12" (hours)
-  publishDate: Date;
-  startDate: Date;
-  tags: string[];
+  thumbnail?: string; // <--- Missing in your file
+  videoUrl?: string; // <--- Missing in your file
   objectives: string[];
   requirements: string[];
-  thumbnail?: string;
-  videoUrl?: string;
+  tags: string[];
+  category?: string;
+  level?: string;
   isPublished: boolean;
   publishedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
+// 2. Create the Schema
 const CourseSchema: Schema = new Schema(
   {
     title: {
       type: String,
-      required: [true, "Title is required"],
-      trim: true,
+      required: true,
     },
     description: {
       type: String,
-      required: [true, "Description is required"],
-    },
-    category: {
-      type: String,
       required: true,
-      enum: [
-        "Grammar",
-        "Business",
-        "Test Preparation",
-        "Speaking",
-        "Writing",
-        "Literature",
-        "Vocabulary",
-        "Other",
-      ],
     },
-    level: {
-      type: String,
+    instructor: {
+      type: Schema.Types.ObjectId,
+      ref: "User", // Links to the User model
       required: true,
-      enum: ["beginner", "intermediate", "advanced"],
-    },
-    language: {
-      type: String,
-      enum: ["en", "bn"],
-      default: "en",
     },
     price: {
       type: Number,
       required: true,
-      min: 0,
     },
     originalPrice: {
       type: Number,
     },
-    instructor: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    duration: {
-      type: String, // or Number if you prefer total hours
-      required: true,
-    },
-    publishDate: {
-      type: Date,
-      required: true,
-    },
-    startDate: {
-      type: Date,
-      required: true,
-    },
-    tags: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-    objectives: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-    requirements: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
     thumbnail: {
-      type: String,
+      type: String, // Stores Cloudinary URL
     },
     videoUrl: {
+      type: String, // Stores Cloudinary URL
+    },
+    objectives: {
+      type: [String],
+      default: [],
+    },
+    requirements: {
+      type: [String],
+      default: [],
+    },
+    tags: {
+      type: [String],
+      default: [],
+    },
+    category: {
       type: String,
+    },
+    level: {
+      type: String,
+      enum: ["Beginner", "Intermediate", "Advanced"],
     },
     isPublished: {
       type: Boolean,
@@ -115,13 +78,8 @@ const CourseSchema: Schema = new Schema(
       type: Date,
     },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true }, // This automatically adds createdAt and updatedAt
 );
 
-// Index for search
-CourseSchema.index({ title: "text", description: "text", tags: "text" });
-
-const Course = mongoose.model<ICourse>("Course", CourseSchema);
-export default Course;
+// 3. Export the Model
+export default mongoose.model<ICourse>("Course", CourseSchema);

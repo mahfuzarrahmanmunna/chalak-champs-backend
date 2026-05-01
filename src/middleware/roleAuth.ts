@@ -1,9 +1,13 @@
-// middleware/roleAuth.ts
+// src/middleware/roleAuth.ts
 import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "./auth";
 
-export const requireRole = (roles: string[]) => {
+// Renamed to 'authorize' to match your import in admin.ts
+// It now accepts either a string ("admin") or an array (["admin", "editor"])
+export const authorize = (allowedRoles: string | string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
+    const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -18,5 +22,8 @@ export const requireRole = (roles: string[]) => {
   };
 };
 
-export const requireAdmin = requireRole(["admin"]);
-export const requireStudentOrAdmin = requireRole(["student", "admin"]);
+// Aliasing 'authorize' to 'requireRole' in case other files use the old name
+export const requireRole = authorize;
+
+export const requireAdmin = authorize("admin");
+export const requireStudentOrAdmin = authorize(["student", "admin"]);

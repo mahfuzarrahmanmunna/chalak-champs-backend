@@ -1,4 +1,5 @@
 import { Response, NextFunction } from "express";
+import mongoose from "mongoose"; // 1. Ensure mongoose is imported for Types.ObjectId
 import Module, { IModule } from "../models/Module";
 import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
@@ -8,26 +9,46 @@ import { AppError, catchAsync } from "../middleware/errorHandler";
 // @access  Private (Instructor/Admin)
 export const createModule = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
+    // 2. Handle params safely (req.params can be string or string[])
     const { courseId } = req.params;
-    const { title, description, scheduledPublishAt, order } = req.body;
+    const courseIdStr = Array.isArray(courseId) ? courseId[0] : courseId;
+
+    const {
+      title,
+      description,
+      scheduledPublishAt,
+      order,
+      thumbnail,
+      videoUrl,
+    } = req.body;
+
+    // Validate ObjectId format to prevent runtime crashes
+    if (!mongoose.Types.ObjectId.isValid(courseIdStr)) {
+      return next(new AppError("Invalid Course ID format", 400));
+    }
 
     // Logic to determine the next order if not provided
     let moduleOrder = order;
     if (!moduleOrder) {
-      const lastModule = await Module.findOne({ courseId }).sort("-order");
+      const lastModule = await Module.findOne({ courseId: courseIdStr }).sort(
+        "-order",
+      );
       moduleOrder = lastModule ? lastModule.order + 1 : 1;
     }
 
     const isScheduled =
       scheduledPublishAt && new Date(scheduledPublishAt) > new Date();
 
+    // 3. FIX: Explicitly cast courseId to ObjectId
     const module = await Module.create({
       title,
       description,
-      courseId,
+      courseId: new mongoose.Types.ObjectId(courseIdStr),
       order: moduleOrder,
+      thumbnail, // Added to match schema
+      videoUrl, // Added to match schema
       scheduledPublishAt: isScheduled ? scheduledPublishAt : undefined,
-      isPublished: !isScheduled, // If no schedule, publish immediately or draft? Let's say draft default unless scheduled.
+      isPublished: !isScheduled,
       publishedAt: !isScheduled ? new Date() : undefined,
     });
 
@@ -47,9 +68,16 @@ export const createModule = catchAsync(
 export const getModulesByCourse = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     const { courseId } = req.params;
+    const courseIdStr = Array.isArray(courseId) ? courseId[0] : courseId;
 
-    // FIX: Removed .populate("lessons") because the 'lessons' field does not exist in your Module schema yet.
-    const modules = await Module.find({ courseId }).sort({ order: 1 });
+    if (!mongoose.Types.ObjectId.isValid(courseIdStr)) {
+      return next(new AppError("Invalid Course ID format", 400));
+    }
+
+    // Mongoose .find() handles string conversion automatically, but we pass the string directly
+    const modules = await Module.find({ courseId: courseIdStr }).sort({
+      order: 1,
+    });
 
     res.status(200).json({
       success: true,
@@ -58,15 +86,18 @@ export const getModulesByCourse = catchAsync(
   },
 );
 
-// @desc    Update Module (e.g., change schedule time)
+// @desc    Update Module
 // @route   PUT /api/modules/:id
 // @access  Private (Instructor/Admin)
 export const updateModule = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     const { id } = req.params;
-    const { title, scheduledPublishAt, isPublished } = req.body;
+    const idStr = Array.isArray(id) ? id[0] : id;
 
-    const module = await Module.findById(id);
+    const { title, scheduledPublishAt, isPublished, thumbnail, videoUrl } =
+      req.body;
+
+    const module = await Module.findById(idStr);
 
     if (!module) {
       return next(new AppError("Module not found", 404));
@@ -77,10 +108,9 @@ export const updateModule = catchAsync(
       const scheduleDate = new Date(scheduledPublishAt);
       if (scheduleDate > new Date()) {
         module.scheduledPublishAt = scheduleDate;
-        module.isPublished = false; // Unpublish if rescheduled for future
+        module.isPublished = false;
         module.publishedAt = undefined;
       } else {
-        // If time is past, publish immediately
         module.isPublished = true;
         module.publishedAt = new Date();
         module.scheduledPublishAt = undefined;
@@ -88,6 +118,9 @@ export const updateModule = catchAsync(
     }
 
     if (title) module.title = title;
+    if (thumbnail) module.thumbnail = thumbnail; // Update thumbnail
+    if (videoUrl) module.videoUrl = videoUrl; // Update videoUrl
+
     if (typeof isPublished === "boolean" && !scheduledPublishAt) {
       module.isPublished = isPublished;
       if (isPublished) module.publishedAt = new Date();
@@ -106,8 +139,9 @@ export const updateModule = catchAsync(
 export const deleteModule = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     const { id } = req.params;
-    await Module.findByIdAndDelete(id);
-    // TODO: Also delete associated lessons or reassign them
+    const idStr = Array.isArray(id) ? id[0] : id;
+
+    await Module.findByIdAndDelete(idStr);
 
     res.status(200).json({ success: true, message: "Module deleted" });
   },
