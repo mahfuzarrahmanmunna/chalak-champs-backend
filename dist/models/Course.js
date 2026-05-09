@@ -33,109 +33,61 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Course = void 0;
-// src/models/Course.ts
 const mongoose_1 = __importStar(require("mongoose"));
+// 2. Create the Schema
 const CourseSchema = new mongoose_1.Schema({
     title: {
         type: String,
-        required: [true, "Title is required"],
-        trim: true,
-        minlength: [3, "Title must be at least 3 characters"],
-    },
-    titleBn: {
-        type: String,
-        trim: true,
+        required: true,
     },
     description: {
         type: String,
-        required: [true, "Description is required"],
-        minlength: [10, "Description must be at least 10 characters"],
+        required: true,
     },
-    descriptionBn: {
-        type: String,
-        trim: true,
-    },
-    category: {
-        type: String,
-        required: [true, "Category is required"],
-        enum: [
-            "competition-prep",
-            "language",
-            "school-subjects",
-            "skill-development",
-            "other",
-        ],
-    },
-    level: {
-        type: String,
-        required: [true, "Level is required"],
-        enum: ["beginner", "intermediate", "advanced"],
-    },
-    language: {
-        type: String,
-        enum: ["en", "bn"],
-        default: "en",
+    instructor: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "User", // Links to the User model
+        required: true,
     },
     price: {
         type: Number,
         required: true,
-        min: [0, "Price must be non-negative"],
-        default: 0,
+    },
+    originalPrice: {
+        type: Number,
     },
     thumbnail: {
-        type: String,
+        type: String, // Stores Cloudinary URL
     },
     videoUrl: {
+        type: String, // Stores Cloudinary URL
+    },
+    objectives: {
+        type: [String],
+        default: [],
+    },
+    requirements: {
+        type: [String],
+        default: [],
+    },
+    tags: {
+        type: [String],
+        default: [],
+    },
+    category: {
         type: String,
     },
-    duration: {
-        type: Number,
-        min: 0,
-    },
-    status: {
+    level: {
         type: String,
-        enum: ["draft", "published", "archived"],
-        default: "draft",
+        enum: ["Beginner", "Intermediate", "Advanced"],
     },
     isPublished: {
         type: Boolean,
         default: false,
     },
-    publishedAt: { type: Date },
-    instructor: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
+    publishedAt: {
+        type: Date,
     },
-    tags: [
-        {
-            type: String,
-            trim: true,
-        },
-    ],
-    objectives: [
-        {
-            type: String,
-            trim: true,
-        },
-    ],
-    requirements: [
-        {
-            type: String,
-            trim: true,
-        },
-    ],
-}, {
-    timestamps: true,
-});
-// Index for search functionality
-CourseSchema.index({
-    title: "text",
-    description: "text",
-    titleBn: "text",
-    descriptionBn: "text",
-});
-const Course = mongoose_1.default.model("Course", CourseSchema);
-exports.Course = Course;
-exports.default = Course;
+}, { timestamps: true });
+// 3. Export the Model
+exports.default = mongoose_1.default.model("Course", CourseSchema);

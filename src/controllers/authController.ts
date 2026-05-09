@@ -147,7 +147,7 @@ export const register = async (
   try {
     const { uid, firstName, lastName, email, phoneNumber, role } = req.body;
 
-    if (!uid || !firstName || !lastName) {
+    if (!uid || !firstName) {
       res.status(400).json({
         success: false,
         message: "Required fields are missing",
@@ -155,22 +155,52 @@ export const register = async (
       return;
     }
 
+    // Normalize optional fields
+    const normalizedLastName = lastName?.trim() || "";
+    const normalizedEmail = email?.toLowerCase().trim() || undefined;
+    const normalizedPhoneNumber = phoneNumber?.trim() || undefined;
+
     // Check if user already exists
     const existingUser = await User.findOne({ uid });
     if (existingUser) {
-      res.status(200).json({
-        success: true,
-        message: "User already registered",
-        user: {
-          uid: existingUser.uid,
-          firstName: existingUser.firstName,
-          lastName: existingUser.lastName,
-          email: existingUser.email,
-          phoneNumber: existingUser.phoneNumber,
-          role: existingUser.role,
-        },
-      });
-      return;
+      // If the user was auto-provisioned (has default firstName "User"), update with registration data
+      if (existingUser.firstName === "User") {
+        existingUser.firstName = firstName.trim();
+        existingUser.lastName = normalizedLastName;
+        existingUser.email = normalizedEmail;
+        existingUser.phoneNumber = normalizedPhoneNumber;
+        existingUser.role = role || "student";
+        await existingUser.save();
+
+        res.status(200).json({
+          success: true,
+          message: "User registered successfully",
+          user: {
+            uid: existingUser.uid,
+            firstName: existingUser.firstName,
+            lastName: existingUser.lastName,
+            email: existingUser.email,
+            phoneNumber: existingUser.phoneNumber,
+            role: existingUser.role,
+          },
+        });
+        return;
+      } else {
+        // User is already fully registered
+        res.status(200).json({
+          success: true,
+          message: "User already registered",
+          user: {
+            uid: existingUser.uid,
+            firstName: existingUser.firstName,
+            lastName: existingUser.lastName,
+            email: existingUser.email,
+            phoneNumber: existingUser.phoneNumber,
+            role: existingUser.role,
+          },
+        });
+        return;
+      }
     }
 
     // Check email uniqueness
@@ -205,9 +235,9 @@ export const register = async (
     const user = new User({
       uid,
       firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email?.toLowerCase().trim() || undefined,
-      phoneNumber: phoneNumber?.trim() || undefined,
+      lastName: normalizedLastName,
+      email: normalizedEmail,
+      phoneNumber: normalizedPhoneNumber,
       role: role || "student",
     });
 
@@ -341,6 +371,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     try {
       // Using Admin SDK to verify credentials
+      // firebase-admin Auth has no web sign-in; this legacy path retained for compatibility.
+      // @ts-expect-error — not part of Admin Auth typings
       const userCredential = await auth.signInWithEmailAndPassword(
         email,
         password,

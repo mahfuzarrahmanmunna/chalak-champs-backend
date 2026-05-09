@@ -20,11 +20,10 @@ export const createModule = catchAsync(
     const course = await Course.findById(courseId);
     if (!course) return next(new AppError("Course not found", 404));
 
-    // FIX: Added 'as any'
-    const count = await Module.countDocuments({ course: courseId } as any);
+    const count = await Module.countDocuments({ courseId });
 
     const module = await Module.create({
-      course: courseId,
+      courseId,
       title,
       description,
       order: count + 1,
@@ -41,8 +40,7 @@ export const getCourseStructure = catchAsync(
     const course = await Course.findById(courseId);
     if (!course) return next(new AppError("Course not found", 404));
 
-    // FIX: Added 'as any'
-    const modules = await Module.find({ course: courseId } as any).sort({
+    const modules = await Module.find({ courseId }).sort({
       order: 1,
     });
 
@@ -135,7 +133,7 @@ export const getLessonById = catchAsync(
     const id = getParam(req.params.id);
     const lesson = await Lesson.findById(id).populate({
       path: "module",
-      populate: { path: "course" },
+      populate: { path: "courseId" },
     });
     if (!lesson) return next(new AppError("Lesson not found", 404));
     res.status(200).json({ success: true, data: lesson });

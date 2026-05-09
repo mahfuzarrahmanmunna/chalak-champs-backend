@@ -47,10 +47,6 @@ const UserSchema = new mongoose_1.Schema({
     },
     lastName: {
         type: String,
-        required: function () {
-            // Only require lastName if not a temporary Firebase user
-            return !this.uid.startsWith("temp_");
-        },
         default: "",
     },
     email: {
@@ -63,7 +59,7 @@ const UserSchema = new mongoose_1.Schema({
         sparse: true,
         unique: true,
     },
-    role: { type: String, default: "student" },
+    role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
 }, {
     timestamps: true,
 });

@@ -1,13 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lingual-academy",
-  "compatibility_date": "2025-09-27",
+  "name": "langual-academy-backend",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
   },
-  "main": "dist/index.js",
-  "assets": {
-    "binding": "ASSETS",
+  "vars": {
+    "FRONTEND_URL": "http://localhost:3000",
   },
 }

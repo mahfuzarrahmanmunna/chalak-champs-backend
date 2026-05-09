@@ -8,7 +8,7 @@ export interface IUser extends Document {
   lastName: string;
   email?: string;
   phoneNumber?: string;
-  role: string;
+  role: 'student' | 'teacher' | 'admin';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,10 +26,6 @@ const UserSchema: Schema = new Schema(
     },
     lastName: {
       type: String,
-      required: function (this: IUser) {
-        // Only require lastName if not a temporary Firebase user
-        return !this.uid.startsWith("temp_");
-      },
       default: "",
     },
     email: {
@@ -42,7 +38,7 @@ const UserSchema: Schema = new Schema(
       sparse: true,
       unique: true,
     },
-    role: { type: String, default: "student" },
+    role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
   },
   {
     timestamps: true,

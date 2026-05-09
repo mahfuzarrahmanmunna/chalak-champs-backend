@@ -3,37 +3,40 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteFromCloudinary = exports.uploadToCloudinary = void 0;
-// src/utils/cloudinary.ts
+exports.deleteLocalFile = exports.uploadToCloudinary = void 0;
 const cloudinary_1 = __importDefault(require("cloudinary"));
-const errorHandler_1 = require("../middleware/errorHandler");
+const fs_1 = __importDefault(require("fs"));
 // Configure Cloudinary
 cloudinary_1.default.v2.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-// Upload file to Cloudinary
-const uploadToCloudinary = async (filePath, folder) => {
+// Generic Upload Function
+const uploadToCloudinary = async (filePath, folder, resourceType) => {
     try {
         const result = await cloudinary_1.default.v2.uploader.upload(filePath, {
             folder,
-            resource_type: "auto", // Automatically detect resource type
+            resource_type: resourceType,
+            chunk_size: 6000000, // Useful for large videos
         });
-        return result;
+        return result.secure_url;
     }
     catch (error) {
-        throw new errorHandler_1.AppError(`Failed to upload file: ${error.message}`, 500);
+        console.error("Cloudinary Upload Error:", error);
+        throw new Error(`Failed to upload ${resourceType} to Cloudinary`);
     }
 };
 exports.uploadToCloudinary = uploadToCloudinary;
-// Delete file from Cloudinary
-const deleteFromCloudinary = async (publicId) => {
+// Delete local file helper
+const deleteLocalFile = (filePath) => {
     try {
-        await cloudinary_1.default.v2.uploader.destroy(publicId);
+        if (fs_1.default.existsSync(filePath)) {
+            fs_1.default.unlinkSync(filePath);
+        }
     }
-    catch (error) {
-        throw new errorHandler_1.AppError(`Failed to delete file: ${error.message}`, 500);
+    catch (err) {
+        console.error("Error deleting local file:", err);
     }
 };
-exports.deleteFromCloudinary = deleteFromCloudinary;
+exports.deleteLocalFile = deleteLocalFile;

@@ -3,11 +3,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserStats = exports.bulkDeleteUsers = exports.deleteUser = exports.updateUser = exports.createUserByAdmin = exports.getUserById = exports.getUsers = void 0;
+exports.getRecentCourses = exports.getUserStats = exports.bulkDeleteUsers = exports.deleteUser = exports.updateUser = exports.createUserByAdmin = exports.getUserById = exports.getUsers = void 0;
 const User_1 = __importDefault(require("../models/User"));
+const Course_1 = __importDefault(require("../models/Course"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const emailService_1 = require("../utils/emailService");
 const phoneService_1 = require("../utils/phoneService");
+// ==========================================
+// USER MANAGEMENT CONTROLLERS
+// ==========================================
 // Get all users with pagination and search
 const getUsers = async (req, res) => {
     try {
@@ -49,16 +53,14 @@ const getUsers = async (req, res) => {
         const totalPages = Math.ceil(totalCount / limit);
         res.status(200).json({
             success: true,
-            data: {
-                users,
-                pagination: {
-                    currentPage: page,
-                    totalPages,
-                    totalCount,
-                    limit,
-                    hasNext: page < totalPages,
-                    hasPrev: page > 1,
-                },
+            users: users,
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalCount,
+                limit,
+                hasNext: page < totalPages,
+                hasPrev: page > 1,
             },
         });
     }
@@ -92,7 +94,7 @@ const getUserById = async (req, res) => {
         }
         res.status(200).json({
             success: true,
-            data: { user },
+            user: user,
         });
     }
     catch (error) {
@@ -141,7 +143,7 @@ const createUserByAdmin = async (req, res) => {
         res.status(201).json({
             success: true,
             message: "User created successfully",
-            data: { user },
+            user: user,
         });
     }
     catch (error) {
@@ -194,7 +196,7 @@ const updateUser = async (req, res) => {
         res.status(200).json({
             success: true,
             message: "User updated successfully",
-            data: { user },
+            user: user,
         });
     }
     catch (error) {
@@ -225,8 +227,6 @@ const deleteUser = async (req, res) => {
             });
             return;
         }
-        // TODO: Also delete user from Firebase if needed
-        // await auth.deleteUser(user.uid);
         res.status(200).json({
             success: true,
             message: "User deleted successfully",
@@ -267,7 +267,7 @@ const bulkDeleteUsers = async (req, res) => {
         res.status(200).json({
             success: true,
             message: `Successfully deleted ${result.deletedCount} users`,
-            data: { deletedCount: result.deletedCount },
+            deletedCount: result.deletedCount,
         });
     }
     catch (error) {
@@ -279,9 +279,13 @@ const bulkDeleteUsers = async (req, res) => {
     }
 };
 exports.bulkDeleteUsers = bulkDeleteUsers;
-// Get user statistics
+// ==========================================
+// DASHBOARD STATISTICS & COURSES
+// ==========================================
+// Get user statistics (Updated to include Courses)
 const getUserStats = async (req, res) => {
     try {
+        // 1. Fetch User Stats
         const [totalUsers, adminUsers, studentUsers, verifiedEmailUsers, verifiedPhoneUsers, recentUsers,] = await Promise.all([
             User_1.default.countDocuments(),
             User_1.default.countDocuments({ role: "admin" }),
@@ -312,14 +316,41 @@ const getUserStats = async (req, res) => {
             },
             { $sort: { "_id.year": 1, "_id.month": 1 } },
         ]);
+        // 2. Fetch Course Stats
+        let totalCourses = 0;
+        let activeCourses = 0;
+        let totalLessons = 0;
+        try {
+            totalCourses = await Course_1.default.countDocuments();
+            activeCourses = await Course_1.default.countDocuments({ status: "active" });
+            // FIX: Cast 'course' to 'any' to avoid TypeScript error if 'lessons' is missing from ICourse interface
+            const coursesWithLessons = await Course_1.default.find({
+                lessons: { $exists: true, $ne: [] },
+            });
+            totalLessons = coursesWithLessons.reduce((acc, course) => {
+                return acc + (course.lessons ? course.lessons.length : 0);
+            }, 0);
+        }
+        catch (err) {
+            console.warn("Course model not found or error fetching courses:", err);
+        }
+        // 3. Calculate new users this month
+        const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        const newUsersThisMonth = await User_1.default.countDocuments({
+            createdAt: { $gte: startOfMonth },
+        });
         res.status(200).json({
             success: true,
-            data: {
+            stats: {
                 totalUsers,
+                totalCourses,
+                totalRevenue: 0, // TODO: Implement Payment logic
+                totalLessons,
+                newUsersThisMonth,
+                activeCourses,
+                // Extras
                 adminUsers,
                 studentUsers,
-                verifiedEmailUsers,
-                verifiedPhoneUsers,
                 recentUsers,
                 monthlyStats,
             },
@@ -334,3 +365,26 @@ const getUserStats = async (req, res) => {
     }
 };
 exports.getUserStats = getUserStats;
+// Get Recent Courses for Dashboard
+const getRecentCourses = async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 5;
+        // Fetch recent courses
+        const courses = await Course_1.default.find()
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .select("title instructor thumbnail status createdAt");
+        res.status(200).json({
+            success: true,
+            courses: courses,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching courses:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Failed to fetch courses",
+        });
+    }
+};
+exports.getRecentCourses = getRecentCourses;
