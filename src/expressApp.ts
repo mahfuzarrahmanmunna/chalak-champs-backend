@@ -39,7 +39,8 @@ export function createExpressApp() {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-  app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+  // Use cwd so this works after bundling for Cloudflare Workers (no __dirname in ESM bundles).
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   app.use("/api/auth", authRoutes);
   app.use("/api/courses", courseRoutes);

@@ -1,17 +1,20 @@
 import nodemailer from "nodemailer";
-import crypto from "crypto";
 
 // In-memory storage for verification codes (in production, use Redis or a database)
 const verificationCodes: Record<string, { code: string; expiresAt: Date }> = {};
 
-// Create a transporter object using SMTP transport
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+let transporterSingleton: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter {
+  transporterSingleton ??= nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+  return transporterSingleton;
+}
 
 // Generate a 6-digit verification code
 export const generateVerificationCode = (): string => {
@@ -127,7 +130,7 @@ export const sendVerificationEmail = async (
     `;
 
     // Send email
-    await transporter.sendMail({
+    await getTransporter().sendMail({
       from: process.env.EMAIL_USER,
       to: email,
       subject: "Chalak Champs - Email Verification",
