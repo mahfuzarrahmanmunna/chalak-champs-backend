@@ -17,7 +17,10 @@ import { ensureMongoConnected } from "./db/mongo";
 export function createExpressApp() {
   const app = express();
 
-  app.use(async (_req, _res, next) => {
+  app.use(async (req, _res, next) => {
+    if (req.path === "/health") {
+      return next();
+    }
     try {
       await ensureMongoConnected();
       next();
