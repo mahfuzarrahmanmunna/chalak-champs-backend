@@ -1,4 +1,3 @@
-// src/models/Module.ts
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface IModule extends Document {
@@ -7,16 +6,16 @@ export interface IModule extends Document {
   description?: string;
   order: number;
   courseId: mongoose.Types.ObjectId;
-  thumbnail?: string; // NEW
-  videoUrl?: string; // NEW
+  thumbnail?: string;
+  videoUrl?: string;
   isPublished: boolean;
   scheduledPublishAt?: Date;
   publishedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const ModuleSchema: Schema = new Schema(
+const ModuleSchema = new Schema(
   {
     title: {
       type: String,
@@ -43,10 +42,10 @@ const ModuleSchema: Schema = new Schema(
       index: true,
     },
     thumbnail: {
-      type: String, // Cloudinary URL
+      type: String,
     },
     videoUrl: {
-      type: String, // Cloudinary URL
+      type: String,
     },
     isPublished: {
       type: Boolean,
@@ -59,9 +58,7 @@ const ModuleSchema: Schema = new Schema(
       type: Date,
     },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
 export default mongoose.model<IModule>("Module", ModuleSchema);

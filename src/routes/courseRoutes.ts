@@ -1,7 +1,7 @@
 import express from "express";
 import {
   createCourse,
-  getCourses,
+  getAllCourses,
   getCourseById,
   updateCourse,
   deleteCourse,
@@ -24,32 +24,17 @@ import {
 } from "../controllers/BatchController";
 import { protect, authorize } from "../middleware/auth";
 import multer from "multer";
-import path from "path";
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (file.fieldname === "thumbnail") cb(null, "uploads/images/");
-    else if (file.fieldname === "video") cb(null, "uploads/videos/");
-    else cb(null, "uploads/misc/");
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
-    );
-  },
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({
-  storage: storage,
+  storage,
   limits: { fileSize: 500 * 1024 * 1024 },
 });
 
 const router = express.Router();
 
 // --- PUBLIC ROUTES ---
-router.get("/", getCourses);
+router.get("/", getAllCourses);
 router.get("/:id", getCourseById);
 
 // --- PROTECTED ROUTES ---

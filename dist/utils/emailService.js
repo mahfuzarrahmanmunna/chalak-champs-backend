@@ -7,14 +7,17 @@ exports.verifyEmailCode = exports.sendVerificationEmail = exports.generateVerifi
 const nodemailer_1 = __importDefault(require("nodemailer"));
 // In-memory storage for verification codes (in production, use Redis or a database)
 const verificationCodes = {};
-// Create a transporter object using SMTP transport
-const transporter = nodemailer_1.default.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
+let transporterSingleton = null;
+function getTransporter() {
+    transporterSingleton ?? (transporterSingleton = nodemailer_1.default.createTransport({
+        service: "gmail",
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+    }));
+    return transporterSingleton;
+}
 // Generate a 6-digit verification code
 const generateVerificationCode = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -124,7 +127,7 @@ const sendVerificationEmail = async (email) => {
       </html>
     `;
         // Send email
-        await transporter.sendMail({
+        await getTransporter().sendMail({
             from: process.env.EMAIL_USER,
             to: email,
             subject: "Chalak Champs - Email Verification",

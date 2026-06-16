@@ -9,28 +9,14 @@ const CurriculumController_1 = require("../controllers/CurriculumController");
 const BatchController_1 = require("../controllers/BatchController");
 const auth_1 = require("../middleware/auth");
 const multer_1 = __importDefault(require("multer"));
-const path_1 = __importDefault(require("path"));
-const storage = multer_1.default.diskStorage({
-    destination: (req, file, cb) => {
-        if (file.fieldname === "thumbnail")
-            cb(null, "uploads/images/");
-        else if (file.fieldname === "video")
-            cb(null, "uploads/videos/");
-        else
-            cb(null, "uploads/misc/");
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, file.fieldname + "-" + uniqueSuffix + path_1.default.extname(file.originalname));
-    },
-});
+const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({
-    storage: storage,
+    storage,
     limits: { fileSize: 500 * 1024 * 1024 },
 });
 const router = express_1.default.Router();
 // --- PUBLIC ROUTES ---
-router.get("/", CourseController_1.getCourses);
+router.get("/", CourseController_1.getAllCourses);
 router.get("/:id", CourseController_1.getCourseById);
 // --- PROTECTED ROUTES ---
 router.use(auth_1.protect);

@@ -19,11 +19,13 @@ router.post("/send-email-verification", authController.sendEmailVerification);
 router.post("/verify-email-code", authController.verifyEmailCode);
 
 // 5. Login
-router.post("/login", authController.login);
+router.post("/signin", authController.login);
 
 // ================= PROTECTED ROUTES ==================
 // Note: We apply the 'authenticate' middleware here because the controller
 // functions (like 'register' and 'getProfile') expect 'req.user' to be populated.
+router.post("/check-user", authController.checkUserExists);
+
 
 // 6. Register User
 router.post("/register", authenticate, authController.register);

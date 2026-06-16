@@ -1,5 +1,6 @@
+// src/index.ts
 import dotenv from "dotenv";
-import { createExpressApp } from "./expressApp";
+import { createExpressApp } from "./expressApp"; // or "./app" depending on your file name
 import { ensureMongoConnected } from "./db/mongo";
 
 dotenv.config();
@@ -21,7 +22,7 @@ async function bootstrap() {
     process.exit(1);
   }
 
-  const app = createExpressApp();
+  const app = createExpressApp(); // Ensure this matches the export in src/app.ts
 
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);

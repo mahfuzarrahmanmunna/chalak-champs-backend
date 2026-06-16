@@ -3,113 +3,147 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteModule = exports.updateModule = exports.getModulesByCourse = exports.createModule = void 0;
-const mongoose_1 = __importDefault(require("mongoose")); // 1. Ensure mongoose is imported for Types.ObjectId
-const Module_1 = __importDefault(require("../models/Module"));
+exports.deleteLesson = exports.getModulesByCourse = exports.createLesson = exports.deleteModule = exports.updateModule = exports.getCourseModules = exports.createModule = void 0;
 const errorHandler_1 = require("../middleware/errorHandler");
-// @desc    Create a new module inside a course
-// @route   POST /api/courses/:courseId/modules
-// @access  Private (Instructor/Admin)
+// RENAME IMPORT to ModuleModel to avoid conflict with Express Router
+const Module_1 = __importDefault(require("../models/Module"));
+const Lesson_1 = __importDefault(require("../models/Lesson"));
+const imgbb_1 = require("../utils/imgbb");
+const getCourseId = (params) => (params.courseId || params.id);
+// 1. CREATE MODULE
 exports.createModule = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
-    // 2. Handle params safely (req.params can be string or string[])
-    const { courseId } = req.params;
-    const courseIdStr = Array.isArray(courseId) ? courseId[0] : courseId;
-    const { title, description, scheduledPublishAt, order, thumbnail, videoUrl, } = req.body;
-    // Validate ObjectId format to prevent runtime crashes
-    if (!mongoose_1.default.Types.ObjectId.isValid(courseIdStr)) {
-        return next(new errorHandler_1.AppError("Invalid Course ID format", 400));
-    }
-    // Logic to determine the next order if not provided
-    let moduleOrder = order;
-    if (!moduleOrder) {
-        const lastModule = await Module_1.default.findOne({ courseId: courseIdStr }).sort("-order");
-        moduleOrder = lastModule ? lastModule.order + 1 : 1;
-    }
-    const isScheduled = scheduledPublishAt && new Date(scheduledPublishAt) > new Date();
-    // 3. FIX: Explicitly cast courseId to ObjectId
-    const module = await Module_1.default.create({
+    const courseId = getCourseId(req.params);
+    const { title } = req.body;
+    // Find max order to append at the end
+    const lastModule = await Module_1.default.findOne({ courseId }).sort("-order");
+    const nextOrder = lastModule ? lastModule.order + 1 : 1;
+    const newModule = await Module_1.default.create({
+        courseId,
         title,
-        description,
-        courseId: new mongoose_1.default.Types.ObjectId(courseIdStr),
-        order: moduleOrder,
-        thumbnail, // Added to match schema
-        videoUrl, // Added to match schema
-        scheduledPublishAt: isScheduled ? scheduledPublishAt : undefined,
-        isPublished: !isScheduled,
-        publishedAt: !isScheduled ? new Date() : undefined,
+        order: nextOrder,
     });
     res.status(201).json({
         success: true,
-        data: module,
-        message: isScheduled
-            ? `Module scheduled for ${new Date(scheduledPublishAt).toLocaleString()}`
-            : "Module created successfully",
+        data: newModule,
     });
 });
-// @desc    Get all modules for a course (Admin View)
-// @route   GET /api/courses/:courseId/modules
-// @access  Private (Instructor/Admin)
-exports.getModulesByCourse = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
-    const { courseId } = req.params;
-    const courseIdStr = Array.isArray(courseId) ? courseId[0] : courseId;
-    if (!mongoose_1.default.Types.ObjectId.isValid(courseIdStr)) {
-        return next(new errorHandler_1.AppError("Invalid Course ID format", 400));
-    }
-    // Mongoose .find() handles string conversion automatically, but we pass the string directly
-    const modules = await Module_1.default.find({ courseId: courseIdStr }).sort({
-        order: 1,
-    });
+// 2. GET MODULES WITH LESSONS
+exports.getCourseModules = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
+    const courseId = getCourseId(req.params);
+    const modules = await Module_1.default.find({ courseId }).sort("order");
+    // Fetch lessons for each module
+    const moduleIds = modules.map((m) => m._id);
+    const lessons = await Lesson_1.default.find({ module: { $in: moduleIds } }).sort("order");
+    // Map lessons to their modules
+    const modulesWithLessons = modules.map((mod) => ({
+        ...mod.toObject(),
+        lessons: lessons.filter((l) => l.module.toString() === mod._id.toString()),
+    }));
     res.status(200).json({
         success: true,
-        data: modules,
+        data: modulesWithLessons,
     });
 });
-// @desc    Update Module
-// @route   PUT /api/modules/:id
-// @access  Private (Instructor/Admin)
+// 3. UPDATE MODULE (MISSING FUNCTION)
 exports.updateModule = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
     const { id } = req.params;
-    const idStr = Array.isArray(id) ? id[0] : id;
-    const { title, scheduledPublishAt, isPublished, thumbnail, videoUrl } = req.body;
-    const module = await Module_1.default.findById(idStr);
+    const files = req.files;
+    let module = await Module_1.default.findById(id);
     if (!module) {
         return next(new errorHandler_1.AppError("Module not found", 404));
     }
-    // Handle scheduling logic
-    if (scheduledPublishAt) {
-        const scheduleDate = new Date(scheduledPublishAt);
-        if (scheduleDate > new Date()) {
-            module.scheduledPublishAt = scheduleDate;
-            module.isPublished = false;
-            module.publishedAt = undefined;
+    try {
+        // Handle Thumbnail Update
+        if (files && files.thumbnail && files.thumbnail[0]) {
+            const file = files.thumbnail[0];
+            const payload = file.buffer ? file.buffer : file.path;
+            const result = await (0, imgbb_1.uploadToImgBB)(payload);
+            module.thumbnail = result.url;
+            if (file.path)
+                (0, imgbb_1.deleteLocalFile)(file.path);
         }
-        else {
-            module.isPublished = true;
-            module.publishedAt = new Date();
-            module.scheduledPublishAt = undefined;
+        // Handle Video Update
+        if (files && files.video && files.video[0]) {
+            const file = files.video[0];
+            const payload = file.buffer ? file.buffer : file.path;
+            const result = await (0, imgbb_1.uploadToImgBB)(payload);
+            module.videoUrl = result.url;
+            if (file.path)
+                (0, imgbb_1.deleteLocalFile)(file.path);
         }
+        else if (req.body.videoUrl) {
+            module.videoUrl = req.body.videoUrl;
+        }
+        // Update Text Fields
+        if (req.body.title)
+            module.title = req.body.title;
+        if (typeof req.body.isPublished !== "undefined") {
+            module.isPublished = req.body.isPublished;
+            module.publishedAt = req.body.isPublished ? new Date() : undefined;
+        }
+        await module.save();
+        res.status(200).json({
+            success: true,
+            data: module,
+            message: "Module updated successfully",
+        });
     }
-    if (title)
-        module.title = title;
-    if (thumbnail)
-        module.thumbnail = thumbnail; // Update thumbnail
-    if (videoUrl)
-        module.videoUrl = videoUrl; // Update videoUrl
-    if (typeof isPublished === "boolean" && !scheduledPublishAt) {
-        module.isPublished = isPublished;
-        if (isPublished)
-            module.publishedAt = new Date();
+    catch (error) {
+        return next(new errorHandler_1.AppError(error.message || "Failed to update module", 500));
     }
-    await module.save();
-    res.status(200).json({
-        success: true,
-        data: module,
-        message: "Module updated successfully",
-    });
 });
+// 4. DELETE MODULE (MISSING FUNCTION)
 exports.deleteModule = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
     const { id } = req.params;
-    const idStr = Array.isArray(id) ? id[0] : id;
-    await Module_1.default.findByIdAndDelete(idStr);
-    res.status(200).json({ success: true, message: "Module deleted" });
+    const module = await Module_1.default.findById(id);
+    if (!module) {
+        return next(new errorHandler_1.AppError("Module not found", 404));
+    }
+    try {
+        // Optional: Delete all lessons inside this module
+        await Lesson_1.default.deleteMany({ module: id });
+        await module.deleteOne();
+        res.status(200).json({
+            success: true,
+            message: "Module deleted successfully",
+        });
+    }
+    catch (error) {
+        return next(new errorHandler_1.AppError(error.message || "Failed to delete module", 500));
+    }
+});
+// 5. CREATE LESSON
+exports.createLesson = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
+    const { moduleId } = req.params;
+    const module = await Module_1.default.findById(moduleId);
+    if (!module)
+        return next(new errorHandler_1.AppError("Module not found", 404));
+    // Determine order
+    const lastLesson = await Lesson_1.default.findOne({ module: moduleId }).sort("-order");
+    const nextOrder = lastLesson ? lastLesson.order + 1 : 1;
+    const lessonData = {
+        module: moduleId,
+        title: req.body.title, // { en, bn }
+        videoUrl: req.body.videoUrl,
+        content: req.body.content,
+        order: nextOrder,
+        duration: parseInt(req.body.duration) || 0,
+        resources: req.body.resources ? JSON.parse(req.body.resources) : [],
+        quiz: req.body.quiz ? JSON.parse(req.body.quiz) : [],
+        isFreePreview: req.body.isFreePreview === "true",
+        type: req.body.type || "video",
+    };
+    const lesson = await Lesson_1.default.create(lessonData);
+    res.status(201).json({
+        success: true,
+        data: lesson,
+    });
+});
+exports.getModulesByCourse = exports.getCourseModules;
+// 6. DELETE LESSON
+exports.deleteLesson = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
+    const lesson = await Lesson_1.default.findByIdAndDelete(req.params.id);
+    if (!lesson)
+        return next(new errorHandler_1.AppError("Lesson not found", 404));
+    res.status(200).json({ success: true, message: "Lesson deleted" });
 });

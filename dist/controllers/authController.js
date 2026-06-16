@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserById = exports.getAllUsers = exports.login = exports.verifyToken = exports.getProfile = exports.register = exports.verifyEmailCode = exports.sendEmailVerification = exports.verifyPhoneCode = exports.sendPhoneVerification = void 0;
+exports.getUserById = exports.getAllUsers = exports.login = exports.checkUserExists = exports.verifyToken = exports.getProfile = exports.register = exports.verifyEmailCode = exports.sendEmailVerification = exports.verifyPhoneCode = exports.sendPhoneVerification = void 0;
 const firebase_1 = require("../config/firebase");
 const User_1 = __importDefault(require("../models/User"));
 const emailService_1 = require("../utils/emailService");
@@ -322,6 +322,37 @@ const verifyToken = async (req, res) => {
     }
 };
 exports.verifyToken = verifyToken;
+// Check if user exists (For Universal Login)
+const checkUserExists = async (req, res) => {
+    try {
+        const { emailOrPhone } = req.body;
+        if (!emailOrPhone) {
+            res
+                .status(400)
+                .json({ success: false, message: "Email or Phone is required" });
+            return;
+        }
+        // Simple check to see if it's an email or phone
+        const isEmail = /\S+@\S+\.\S+/.test(emailOrPhone);
+        let user;
+        if (isEmail) {
+            user = await User_1.default.findOne({ email: emailOrPhone.toLowerCase().trim() });
+        }
+        else {
+            user = await User_1.default.findOne({ phoneNumber: emailOrPhone.trim() });
+        }
+        // Return true if user found, false otherwise
+        res.status(200).json({ exists: !!user });
+    }
+    catch (error) {
+        console.error("Error checking user:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message || "Failed to check user status",
+        });
+    }
+};
+exports.checkUserExists = checkUserExists;
 // Login
 const login = async (req, res) => {
     try {
@@ -335,6 +366,8 @@ const login = async (req, res) => {
         }
         try {
             // Using Admin SDK to verify credentials
+            // firebase-admin Auth has no web sign-in; this legacy path retained for compatibility.
+            // @ts-expect-error — not part of Admin Auth typings
             const userCredential = await firebase_1.auth.signInWithEmailAndPassword(email, password);
             const userRecord = userCredential.user;
             if (!userRecord) {

@@ -84,7 +84,7 @@ const sendEmails = async (data) => {
             </p>
 
             <div style="text-align: center; margin: 40px 0;">
-              <a href="http://localhost:3000" style="background-color: ${primaryColor}; color: white; padding: 12px 30px; text-decoration: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(243, 6, 110, 0.3);">
+              <a href="https://chalakchamps.com" style="background-color: ${primaryColor}; color: white; padding: 12px 30px; text-decoration: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(243, 6, 110, 0.3);">
                 Visit Our Website
               </a>
             </div>

@@ -356,6 +356,41 @@ export const verifyToken = async (
   }
 };
 
+// Check if user exists (For Universal Login)
+export const checkUserExists = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { emailOrPhone } = req.body;
+    if (!emailOrPhone) {
+      res
+        .status(400)
+        .json({ success: false, message: "Email or Phone is required" });
+      return;
+    }
+
+    // Simple check to see if it's an email or phone
+    const isEmail = /\S+@\S+\.\S+/.test(emailOrPhone);
+
+    let user;
+    if (isEmail) {
+      user = await User.findOne({ email: emailOrPhone.toLowerCase().trim() });
+    } else {
+      user = await User.findOne({ phoneNumber: emailOrPhone.trim() });
+    }
+
+    // Return true if user found, false otherwise
+    res.status(200).json({ exists: !!user });
+  } catch (error: any) {
+    console.error("Error checking user:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to check user status",
+    });
+  }
+};
+
 // Login
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {

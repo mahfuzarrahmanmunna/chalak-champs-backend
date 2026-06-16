@@ -1,61 +1,64 @@
-import express from "express";
+import { Router } from "express";
 import multer from "multer";
-import path from "path";
-import {
-  createModule,
-  getModulesByCourse,
-  updateModule,
-  deleteModule,
-} from "../controllers/moduleController";
 import { protect, authorize } from "../middleware/auth";
+import * as moduleController from "../controllers/moduleController";
 
-const router = express.Router({ mergeParams: true }); // Important for :courseId
+const router = Router();
 
-// Multer Config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (file.fieldname === "thumbnail") cb(null, "uploads/images/");
-    else if (file.fieldname === "video") cb(null, "uploads/videos/");
-    else cb(null, "uploads/misc/");
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
-    );
-  },
-});
+// Multer for file uploads (if needed in future)
+const upload = multer({ storage: multer.memoryStorage() });
 
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
-});
+// --- MODULE ROUTES ---
 
-router.use(protect); // All routes require login
-
-// Create Module (With File Uploads)
-router.post(
-  "/",
+// Get modules for a specific course
+router.get(
+  "/:courseId",
+  protect,
   authorize("instructor", "admin"),
-  upload.fields([
-    { name: "thumbnail", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
-  createModule,
+  moduleController.getCourseModules,
 );
 
-// Get Modules (Course Dashboard)
-router.get("/", getModulesByCourse);
+// Create a new module
+router.post(
+  "/:courseId",
+  protect,
+  authorize("instructor", "admin"),
+  upload.fields([{ name: "thumbnail", maxCount: 1 }]), // Handle thumbnail if needed
+  moduleController.createModule,
+);
 
-// Update Module
+// Update a module
 router.put(
   "/:id",
+  protect,
   authorize("instructor", "admin"),
-  // If you want to allow updating files, add upload.fields here too
-  updateModule,
+  moduleController.updateModule,
 );
 
-router.delete("/:id", authorize("instructor", "admin"), deleteModule);
+// Delete a module
+router.delete(
+  "/:id",
+  protect,
+  authorize("instructor", "admin"),
+  moduleController.deleteModule,
+);
+
+// --- LESSON ROUTES (Nested) ---
+
+// Create a lesson inside a specific module
+router.post(
+  "/:moduleId/lessons",
+  protect,
+  authorize("instructor", "admin"),
+  moduleController.createLesson,
+);
+
+// Delete a lesson
+router.delete(
+  "/lessons/:id",
+  protect,
+  authorize("instructor", "admin"),
+  moduleController.deleteLesson,
+);
 
 export default router;

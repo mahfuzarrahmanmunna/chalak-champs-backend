@@ -12,23 +12,22 @@ const path_1 = __importDefault(require("path"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const courses_1 = __importDefault(require("./routes/courses"));
 const auth_1 = __importDefault(require("./routes/auth"));
-const database_1 = require("./config/database");
+// REMOVED: import { connectDB } from "./config/database";
 const errorHandler_1 = require("./middleware/errorHandler");
 const logger_1 = require("./utils/logger");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-// Connect to MongoDB
-(0, database_1.connectDB)();
+// REMOVED: connectDB();  <-- Do NOT connect here. Let index.ts handle it.
 // Middleware
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: process.env.FRONTEND_URL || "https://chalakchamps.com",
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     optionsSuccessStatus: 200,
 }));
-app.use((0, morgan_1.default)("combined", { stream: logger_1.morganStream })); // Use Morgan with Winston
+app.use((0, morgan_1.default)("combined", { stream: logger_1.morganStream }));
 app.use(express_1.default.json({ limit: "10mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "10mb" }));
 // Static files

@@ -7,25 +7,8 @@ import { AppError } from "./errorHandler";
 type StorageFile = { fieldname: string; originalname: string };
 type StorageCb = (err: Error | null, path: string) => void;
 
-// Configure multer storage
-const storage = multer.diskStorage({
-  destination: (req: Request, file: StorageFile, cb: StorageCb) => {
-    if (file.fieldname === "thumbnail") {
-      cb(null, "uploads/thumbnails/");
-    } else if (file.fieldname === "video") {
-      cb(null, "uploads/videos/");
-    } else {
-      cb(null, "uploads/");
-    }
-  },
-  filename: (req: Request, file: StorageFile, cb: StorageCb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
-    );
-  },
-});
+// Use memory storage to avoid writing files to disk (better for serverless)
+const storage = multer.memoryStorage();
 
 // File filter
 const fileFilter = (

@@ -33,7 +33,6 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-// src/models/Module.ts
 const mongoose_1 = __importStar(require("mongoose"));
 const ModuleSchema = new mongoose_1.Schema({
     title: {
@@ -61,10 +60,10 @@ const ModuleSchema = new mongoose_1.Schema({
         index: true,
     },
     thumbnail: {
-        type: String, // Cloudinary URL
+        type: String,
     },
     videoUrl: {
-        type: String, // Cloudinary URL
+        type: String,
     },
     isPublished: {
         type: Boolean,
@@ -76,7 +75,5 @@ const ModuleSchema = new mongoose_1.Schema({
     publishedAt: {
         type: Date,
     },
-}, {
-    timestamps: true,
-});
+}, { timestamps: true });
 exports.default = mongoose_1.default.model("Module", ModuleSchema);

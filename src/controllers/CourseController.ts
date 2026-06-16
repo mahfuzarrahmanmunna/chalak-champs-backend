@@ -1,66 +1,98 @@
-import { Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
-import { uploadToCloudinary, deleteLocalFile } from "../utils/cloudinary";
-import cloudinary from "cloudinary";
-import Course from "../models/Course";
+import {
+  uploadToImgBB,
+  deleteLocalFile,
+  deleteFromImgBB,
+} from "../utils/imgbb";
+import Course, { ICourse } from "../models/Course";
 
-// Type for Multer files
-type MulterFiles = { [fieldname: string]: { path: string }[] };
-type RequestWithFiles = Omit<AuthRequest, "files"> & { files?: MulterFiles };
-
-// Helper: Extract Public ID from Cloudinary URL
-const getPublicId = (url: string) => {
-  const parts = url.split("/");
-  const file = parts[parts.length - 1];
-  return file.split(".")[0];
+// --- TYPES ---
+// 1. Multer Files Type (Supports both buffer for memoryStorage and path for diskStorage)
+type MulterFiles = {
+  [fieldname: string]: {
+    buffer?: Buffer;
+    path?: string;
+    originalname?: string;
+  }[];
 };
 
-// --- CREATE ---
+// 2. Combined Request Type (Auth + Files)
+type RequestWithFiles = Omit<AuthRequest, "files"> & { files?: MulterFiles };
+
+// --- CONTROLLERS ---
+
+// 1. CREATE COURSE
 export const createCourse = catchAsync(
   async (req: RequestWithFiles, res: Response, next: NextFunction) => {
     const { user } = req;
     const files = req.files as MulterFiles;
 
-    let thumbnailUrl: string | undefined;
-    let videoUrl: string | undefined;
+    let thumbnailData: { url: string; deleteUrl: string } | undefined;
+    let videoData: { url: string; deleteUrl: string } | undefined;
 
     try {
-      // 1. Handle Thumbnail
-      if (files && files.thumbnail) {
-        const path = files.thumbnail[0].path;
-        thumbnailUrl = await uploadToCloudinary(
-          path,
-          "course_thumbnails",
-          "image",
-        );
-        deleteLocalFile(path);
+      // 1. Handle Thumbnail Upload
+      if (files && files.thumbnail && files.thumbnail[0]) {
+        const file = files.thumbnail[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        thumbnailData = await uploadToImgBB(payload as any);
+        if (file.path) {
+          deleteLocalFile(file.path);
+        }
       }
 
-      // 2. Handle Video
-      if (files && files.video) {
-        const path = files.video[0].path;
-        videoUrl = await uploadToCloudinary(path, "course_videos", "video");
-        deleteLocalFile(path);
+      // 2. Handle Video Upload
+      if (files && files.video && files.video[0]) {
+        const file = files.video[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        videoData = await uploadToImgBB(payload as any);
+        if (file.path) {
+          deleteLocalFile(file.path);
+        }
       }
 
-      // 3. Prepare Data
-      const courseData = {
+      // 3. Parse JSON Data (Sent as strings from FormData)
+      const parseJSON = (value: any) => {
+        if (!value) return undefined;
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          console.error("JSON Parse Error:", e);
+          return value; // return raw value if parse fails
+        }
+      };
+
+      const courseData: any = {
         ...req.body,
         instructor: user?._id || req.body.instructor,
         price: parseFloat(req.body.price),
         originalPrice: req.body.originalPrice
           ? parseFloat(req.body.originalPrice)
           : undefined,
-        objectives: req.body.objectives ? JSON.parse(req.body.objectives) : [],
-        requirements: req.body.requirements
-          ? JSON.parse(req.body.requirements)
-          : [],
-        tags: req.body.tags
-          ? req.body.tags.split(",").map((t: string) => t.trim())
-          : [],
-        thumbnail: thumbnailUrl,
-        videoUrl: videoUrl,
+
+        // Parse Bilingual/Array fields
+        title: parseJSON(req.body.title),
+        heroSubtitle: parseJSON(req.body.heroSubtitle),
+        quickInfo: parseJSON(req.body.quickInfo) || [],
+        levels: parseJSON(req.body.levels) || [],
+        features: parseJSON(req.body.features) || [],
+        faqs: parseJSON(req.body.faqs) || [],
+        resources: parseJSON(req.body.resources) || [],
+
+        // ✅ FIX: Save Quill HTML from the admin form into a localized description object
+        description: {
+          en: req.body.contentEn || "",
+          bn: req.body.contentBn || "",
+        },
+
+        // Save ImgBB URLs
+        thumbnail: thumbnailData?.url,
+        thumbnailDeleteUrl: thumbnailData?.deleteUrl,
+        videoUrl: videoData?.url,
+        videoDeleteUrl: videoData?.deleteUrl,
+
         isPublished: true,
         publishedAt: new Date(),
       };
@@ -73,8 +105,13 @@ export const createCourse = catchAsync(
         message: "Course created successfully",
       });
     } catch (error: any) {
-      if (files?.thumbnail) deleteLocalFile(files.thumbnail[0].path);
-      if (files?.video) deleteLocalFile(files.video[0].path);
+      // Cleanup local files if DB save fails
+      if (files?.thumbnail?.[0]?.path) {
+        deleteLocalFile(files.thumbnail[0].path);
+      }
+      if (files?.video?.[0]?.path) {
+        deleteLocalFile(files.video[0].path);
+      }
       return next(
         new AppError(error.message || "Failed to create course", 500),
       );
@@ -82,50 +119,27 @@ export const createCourse = catchAsync(
   },
 );
 
-// --- GET ALL ---
-export const getCourses = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { search, category, level, page = 1, limit = 10 } = req.query;
-
-    const query: any = {};
-
-    if (category) query.category = category;
-    if (level) query.level = level;
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { tags: { $in: [new RegExp(search as string, "i")] } },
-      ];
-    }
-
-    const pageNum = parseInt(page as string);
-    const limitNum = parseInt(limit as string);
-    const skip = (pageNum - 1) * limitNum;
-
-    const courses = await Course.find(query)
-      .populate("instructor", "name email avatar")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
-
-    const total = await Course.countDocuments(query);
+// 2. GET ALL COURSES (Public)
+export const getAllCourses = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const courses = await Course.find({ isPublished: true })
+      .populate("instructor", "name email")
+      .sort("-createdAt");
 
     res.status(200).json({
       success: true,
       count: courses.length,
-      pagination: { page: pageNum, pages: Math.ceil(total / limitNum), total },
       data: courses,
     });
   },
 );
 
-// --- GET ONE ---
+// 3. GET SINGLE COURSE (Public)
 export const getCourseById = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     const course = await Course.findById(req.params.id).populate(
       "instructor",
-      "name email bio",
+      "name email",
     );
 
     if (!course) {
@@ -139,136 +153,202 @@ export const getCourseById = catchAsync(
   },
 );
 
-// --- UPDATE ---
-export const updateCourse = catchAsync(
-  async (req: RequestWithFiles, res: Response, next: NextFunction) => {
-    let course = await Course.findById(req.params.id);
-
-    if (!course) return next(new AppError("Course not found", 404));
-
-    // Authorization Check
-    if (
-      course.instructor.toString() !== req.user!._id.toString() &&
-      req.user!.role !== "admin"
-    ) {
-      return next(new AppError("Not authorized to update this course", 403));
-    }
-
-    const files = req.files as MulterFiles;
-    const updateData: any = { ...req.body };
-
-    // Handle Price conversion
-    if (req.body.price) updateData.price = parseFloat(req.body.price);
-    if (req.body.originalPrice)
-      updateData.originalPrice = parseFloat(req.body.originalPrice);
-
-    // Handle Arrays
-    if (req.body.objectives)
-      updateData.objectives = JSON.parse(req.body.objectives);
-    if (req.body.requirements)
-      updateData.requirements = JSON.parse(req.body.requirements);
-    if (req.body.tags)
-      updateData.tags = req.body.tags.split(",").map((t: string) => t.trim());
-
-    // 1. Handle Thumbnail Update
-    if (files && files.thumbnail) {
-      // Delete old thumbnail from Cloudinary if it exists
-      if (course.thumbnail) {
-        const publicId = `course_thumbnails/${getPublicId(course.thumbnail)}`;
-        await cloudinary.v2.uploader.destroy(publicId);
-      }
-
-      // Upload new
-      const path = files.thumbnail[0].path;
-      updateData.thumbnail = await uploadToCloudinary(
-        path,
-        "course_thumbnails",
-        "image",
-      );
-      deleteLocalFile(path);
-    }
-
-    // 2. Handle Video Update
-    if (files && files.video) {
-      // Delete old video
-      if (course.videoUrl) {
-        const publicId = `course_videos/${getPublicId(course.videoUrl)}`;
-        await cloudinary.v2.uploader.destroy(publicId, {
-          resource_type: "video",
-        });
-      }
-
-      // Upload new
-      const path = files.video[0].path;
-      updateData.videoUrl = await uploadToCloudinary(
-        path,
-        "course_videos",
-        "video",
-      );
-      deleteLocalFile(path);
-    }
-
-    course = await Course.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-      runValidators: true,
-    });
-
-    res.status(200).json({
-      success: true,
-      data: course,
-      message: "Course updated successfully",
-    });
-  },
-);
-
-// --- DELETE ---
-export const deleteCourse = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const course = await Course.findById(req.params.id);
-
-    if (!course) return next(new AppError("Course not found", 404));
-
-    // Authorization Check
-    if (
-      course.instructor.toString() !== req.user!._id.toString() &&
-      req.user!.role !== "admin"
-    ) {
-      return next(new AppError("Not authorized to delete this course", 403));
-    }
-
-    // Delete Assets from Cloudinary
-    if (course.thumbnail) {
-      await cloudinary.v2.uploader.destroy(
-        `course_thumbnails/${getPublicId(course.thumbnail)}`,
-      );
-    }
-    if (course.videoUrl) {
-      await cloudinary.v2.uploader.destroy(
-        `course_videos/${getPublicId(course.videoUrl)}`,
-        { resource_type: "video" },
-      );
-    }
-
-    await Course.findByIdAndDelete(req.params.id);
-
-    res.status(200).json({
-      success: true,
-      message: "Course deleted successfully",
-    });
-  },
-);
-
-// --- GET COURSES BY INSTRUCTOR (My Courses) ---
+// 4. GET INSTRUCTOR COURSES (Protected)
 export const getInstructorCourses = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const courses = await Course.find({ instructor: req.user!._id }).sort({
-      createdAt: -1,
-    });
+    const courses = await Course.find({ instructor: req.user?._id }).sort(
+      "-createdAt",
+    );
 
     res.status(200).json({
       success: true,
       count: courses.length,
       data: courses,
     });
+  },
+);
+
+// 5. UPDATE COURSE
+export const updateCourse = catchAsync(
+  async (req: RequestWithFiles, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+    const files = req.files as MulterFiles;
+
+    let course = await Course.findById(id);
+
+    if (!course) {
+      return next(new AppError("Course not found", 404));
+    }
+
+    // Authorization
+    if (
+      course.instructor.toString() !== req.user?._id.toString() &&
+      req.user?.role !== "admin"
+    ) {
+      return next(new AppError("Not authorized to update this course", 403));
+    }
+
+    try {
+      // Handle Thumbnail Update
+      if (files && files.thumbnail && files.thumbnail[0]) {
+        if (course.thumbnailDeleteUrl) {
+          await deleteFromImgBB(course.thumbnailDeleteUrl);
+        }
+        const file = files.thumbnail[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        const newData = await uploadToImgBB(payload as any);
+        course.thumbnail = newData.url;
+        course.thumbnailDeleteUrl = newData.deleteUrl;
+        if (file.path) {
+          deleteLocalFile(file.path);
+        }
+      }
+
+      // Handle Video Update
+      if (files && files.video && files.video[0]) {
+        if (course.videoDeleteUrl) {
+          await deleteFromImgBB(course.videoDeleteUrl);
+        }
+        const file = files.video[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        const newData = await uploadToImgBB(payload as any);
+        course.videoUrl = newData.url;
+        course.videoDeleteUrl = newData.deleteUrl;
+        if (file.path) {
+          deleteLocalFile(file.path);
+        }
+      }
+
+      // Update Text Fields
+      const {
+        title,
+        heroSubtitle,
+        price,
+        originalPrice,
+        category,
+        level,
+        isPublished,
+        quickInfo,
+        levels,
+        features,
+        faqs,
+        offerDetails,
+        courseOverview,
+        instructorName,
+        duration,
+      } = req.body;
+
+      // Helper to safely parse JSON
+      const parseJSON = (value: any) => {
+        if (!value) return undefined;
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          console.error("JSON Parse Error:", e);
+          return value;
+        }
+      };
+
+      if (title) course.title = parseJSON(title);
+      if (heroSubtitle) course.heroSubtitle = parseJSON(heroSubtitle);
+
+      // ✅ FIX: Map Quill content properly for Update
+      if (
+        req.body.contentEn !== undefined ||
+        req.body.contentBn !== undefined
+      ) {
+        course.description = {
+          en:
+            req.body.contentEn !== undefined
+              ? req.body.contentEn
+              : course.description?.en || "",
+          bn:
+            req.body.contentBn !== undefined
+              ? req.body.contentBn
+              : course.description?.bn || "",
+        };
+      }
+
+      if (price) course.price = parseFloat(price);
+      if (originalPrice) course.originalPrice = parseFloat(originalPrice);
+      if (category) course.category = category;
+      if (level) course.level = level;
+      if (instructorName) course.instructorName = instructorName;
+      if (duration) course.duration = duration;
+      if (typeof isPublished !== "undefined") {
+        course.isPublished = isPublished;
+        course.publishedAt = isPublished ? new Date() : undefined;
+      }
+      if (offerDetails) course.offerDetails = offerDetails;
+      if (courseOverview) course.courseOverview = courseOverview;
+
+      // Parse Complex Fields
+      if (quickInfo) course.quickInfo = parseJSON(quickInfo);
+      if (levels) course.levels = parseJSON(levels);
+      if (features) course.features = parseJSON(features);
+      if (faqs) course.faqs = parseJSON(faqs);
+
+      await course.save();
+
+      res.status(200).json({
+        success: true,
+        data: course,
+        message: "Course updated successfully",
+      });
+    } catch (error: any) {
+      // Cleanup local files if DB save fails
+      if (files?.thumbnail?.[0]?.path) {
+        deleteLocalFile(files.thumbnail[0].path);
+      }
+      if (files?.video?.[0]?.path) {
+        deleteLocalFile(files.video[0].path);
+      }
+      return next(
+        new AppError(error.message || "Failed to update course", 500),
+      );
+    }
+  },
+);
+
+// 6. DELETE COURSE
+export const deleteCourse = catchAsync(
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+
+    const course = await Course.findById(id);
+
+    if (!course) {
+      return next(new AppError("Course not found", 404));
+    }
+
+    // Authorization
+    if (
+      course.instructor.toString() !== req.user?._id.toString() &&
+      req.user?.role !== "admin"
+    ) {
+      return next(new AppError("Not authorized to delete this course", 403));
+    }
+
+    try {
+      // 1. Delete Assets from ImgBB
+      if (course.thumbnailDeleteUrl) {
+        await deleteFromImgBB(course.thumbnailDeleteUrl);
+      }
+      if (course.videoDeleteUrl) {
+        await deleteFromImgBB(course.videoDeleteUrl);
+      }
+
+      // 2. Delete DB Record
+      await course.deleteOne();
+
+      res.status(200).json({
+        success: true,
+        message: "Course deleted successfully",
+      });
+    } catch (error: any) {
+      return next(
+        new AppError(error.message || "Failed to delete course", 500),
+      );
+    }
   },
 );

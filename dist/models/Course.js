@@ -34,60 +34,54 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
-// 2. Create the Schema
 const CourseSchema = new mongoose_1.Schema({
-    title: {
-        type: String,
-        required: true,
-    },
+    title: { type: String, required: true },
+    heroSubtitle: { type: String, required: true },
     description: {
-        type: String,
-        required: true,
+        en: { type: String, default: "" },
+        bn: { type: String, default: "" },
     },
-    instructor: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: "User", // Links to the User model
-        required: true,
-    },
-    price: {
-        type: Number,
-        required: true,
-    },
-    originalPrice: {
-        type: Number,
-    },
-    thumbnail: {
-        type: String, // Stores Cloudinary URL
-    },
-    videoUrl: {
-        type: String, // Stores Cloudinary URL
-    },
-    objectives: {
-        type: [String],
-        default: [],
-    },
-    requirements: {
-        type: [String],
-        default: [],
-    },
-    tags: {
-        type: [String],
-        default: [],
-    },
-    category: {
-        type: String,
-    },
+    instructor: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
+    instructorName: { type: String }, // <--- ADDED THIS
+    duration: { type: String }, // <--- ADDED THIS
+    price: { type: Number, required: true },
+    originalPrice: { type: Number },
+    thumbnail: { type: String },
+    thumbnailDeleteUrl: { type: String },
+    videoUrl: { type: String },
+    videoDeleteUrl: { type: String },
+    quickInfo: { type: [String], default: [] },
+    offerDetails: { type: String },
+    courseOverview: { type: String },
+    levels: [
+        {
+            title: String,
+            description: String,
+            targetAudience: String,
+            topics: [String],
+        },
+    ],
+    features: [
+        {
+            title: String,
+            description: {
+                en: { type: String, default: "" },
+                bn: { type: String, default: "" },
+            },
+        },
+    ],
+    faqs: [
+        {
+            question: String,
+            answer: String,
+        },
+    ],
+    category: { type: String },
     level: {
         type: String,
         enum: ["Beginner", "Intermediate", "Advanced"],
     },
-    isPublished: {
-        type: Boolean,
-        default: false,
-    },
-    publishedAt: {
-        type: Date,
-    },
+    isPublished: { type: Boolean, default: false },
+    publishedAt: { type: Date },
 }, { timestamps: true });
-// 3. Export the Model
 exports.default = mongoose_1.default.model("Course", CourseSchema);

@@ -1,8 +1,7 @@
-import { httpServerHandler } from "cloudflare:node";
-import dotenv from "dotenv";
-import { createExpressApp } from "./expressApp";
+// src/worker.ts
 
-dotenv.config();
+import { httpServerHandler } from "cloudflare:node";
+import { createExpressApp } from "./expressApp";
 
 const LISTEN_PORT = 3000;
 const app = createExpressApp();

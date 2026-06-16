@@ -1,148 +1,256 @@
-import { Response, NextFunction } from "express";
-import mongoose from "mongoose"; // 1. Ensure mongoose is imported for Types.ObjectId
-import Module, { IModule } from "../models/Module";
+import { Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
+// RENAME IMPORT to ModuleModel to avoid conflict with Express Router
+import ModuleModel, { IModule } from "../models/Module";
+import Lesson from "../models/Lesson";
+import { uploadToImgBB, deleteLocalFile } from "../utils/imgbb";
 
-// @desc    Create a new module inside a course
-// @route   POST /api/courses/:courseId/modules
-// @access  Private (Instructor/Admin)
+const getCourseId = (params: Request["params"]) =>
+  (params.courseId || params.id) as string;
+
+// --- TYPES ---
+type MulterFiles = {
+  [fieldname: string]: {
+    buffer?: Buffer;
+    path?: string;
+    originalname?: string;
+  }[];
+};
+
+type RequestWithFiles = Omit<AuthRequest, "files"> & { files?: MulterFiles };
+
+// 1. CREATE MODULE
 export const createModule = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    // 2. Handle params safely (req.params can be string or string[])
-    const { courseId } = req.params;
-    const courseIdStr = Array.isArray(courseId) ? courseId[0] : courseId;
+  async (req: RequestWithFiles, res: Response, next: NextFunction) => {
+    const courseId = getCourseId(req.params);
+    const { title } = req.body ?? {};
+    const files = req.files as MulterFiles;
 
-    const {
-      title,
-      description,
-      scheduledPublishAt,
-      order,
-      thumbnail,
-      videoUrl,
-    } = req.body;
-
-    // Validate ObjectId format to prevent runtime crashes
-    if (!mongoose.Types.ObjectId.isValid(courseIdStr)) {
-      return next(new AppError("Invalid Course ID format", 400));
+    if (!title) {
+      return next(new AppError("Module title is required", 400));
     }
 
-    // Logic to determine the next order if not provided
-    let moduleOrder = order;
-    if (!moduleOrder) {
-      const lastModule = await Module.findOne({ courseId: courseIdStr }).sort(
-        "-order",
-      );
-      moduleOrder = lastModule ? lastModule.order + 1 : 1;
+    const lastModule = await ModuleModel.findOne({ courseId }).sort("-order");
+    const nextOrder = lastModule ? lastModule.order + 1 : 1;
+
+    const isPublished =
+      req.body.isPublished === "true" || req.body.isPublished === true;
+
+    const moduleFields: {
+      courseId: mongoose.Types.ObjectId;
+      title: string;
+      order: number;
+      titleBn?: string;
+      description?: string;
+      videoUrl?: string;
+      isPublished?: boolean;
+      publishedAt?: Date;
+      thumbnail?: string;
+    } = {
+      courseId: new mongoose.Types.ObjectId(courseId),
+      title,
+      order: nextOrder,
+    };
+
+    if (req.body.titleBn) moduleFields.titleBn = req.body.titleBn;
+    if (req.body.description) moduleFields.description = req.body.description;
+    if (req.body.videoUrl) moduleFields.videoUrl = req.body.videoUrl;
+    if (typeof req.body.isPublished !== "undefined") {
+      moduleFields.isPublished = isPublished;
+      if (isPublished) moduleFields.publishedAt = new Date();
     }
 
-    const isScheduled =
-      scheduledPublishAt && new Date(scheduledPublishAt) > new Date();
+    try {
+      if (files?.thumbnail?.[0]) {
+        const file = files.thumbnail[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        const result = await uploadToImgBB(payload as Buffer | string);
+        moduleFields.thumbnail = result.url;
+        if (file.path) deleteLocalFile(file.path);
+      }
 
-    // 3. FIX: Explicitly cast courseId to ObjectId
-    const module = await Module.create({
-      title,
-      description,
-      courseId: new mongoose.Types.ObjectId(courseIdStr),
-      order: moduleOrder,
-      thumbnail, // Added to match schema
-      videoUrl, // Added to match schema
-      scheduledPublishAt: isScheduled ? scheduledPublishAt : undefined,
-      isPublished: !isScheduled,
-      publishedAt: !isScheduled ? new Date() : undefined,
-    });
+      if (files?.video?.[0]) {
+        const file = files.video[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        const result = await uploadToImgBB(payload as Buffer | string);
+        moduleFields.videoUrl = result.url;
+        if (file.path) deleteLocalFile(file.path);
+      }
 
-    res.status(201).json({
-      success: true,
-      data: module,
-      message: isScheduled
-        ? `Module scheduled for ${new Date(scheduledPublishAt).toLocaleString()}`
-        : "Module created successfully",
-    });
+      const newModule = await ModuleModel.create(moduleFields);
+
+      res.status(201).json({
+        success: true,
+        data: newModule,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create module";
+      return next(new AppError(message, 500));
+    }
   },
 );
 
-// @desc    Get all modules for a course (Admin View)
-// @route   GET /api/courses/:courseId/modules
-// @access  Private (Instructor/Admin)
-export const getModulesByCourse = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { courseId } = req.params;
-    const courseIdStr = Array.isArray(courseId) ? courseId[0] : courseId;
+// 2. GET MODULES WITH LESSONS
+export const getCourseModules = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const courseId = getCourseId(req.params);
 
-    if (!mongoose.Types.ObjectId.isValid(courseIdStr)) {
-      return next(new AppError("Invalid Course ID format", 400));
-    }
+    const modules = await ModuleModel.find({ courseId }).sort("order");
 
-    // Mongoose .find() handles string conversion automatically, but we pass the string directly
-    const modules = await Module.find({ courseId: courseIdStr }).sort({
-      order: 1,
-    });
+    // Fetch lessons for each module
+    const moduleIds = modules.map((m: IModule) => m._id);
+    const lessons = await Lesson.find({ module: { $in: moduleIds } }).sort(
+      "order",
+    );
+
+    // Map lessons to their modules
+    const modulesWithLessons = modules.map((mod: IModule) => ({
+      ...mod.toObject(),
+      lessons: lessons.filter(
+        (l) => l.module.toString() === mod._id.toString(),
+      ),
+    }));
 
     res.status(200).json({
       success: true,
-      data: modules,
+      data: modulesWithLessons,
     });
   },
 );
 
-// @desc    Update Module
-// @route   PUT /api/modules/:id
-// @access  Private (Instructor/Admin)
+// 3. UPDATE MODULE (MISSING FUNCTION)
 export const updateModule = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
+  async (req: RequestWithFiles, res: Response, next: NextFunction) => {
     const { id } = req.params;
-    const idStr = Array.isArray(id) ? id[0] : id;
+    const files = req.files as MulterFiles;
 
-    const { title, scheduledPublishAt, isPublished, thumbnail, videoUrl } =
-      req.body;
-
-    const module = await Module.findById(idStr);
+    let module = await ModuleModel.findById(id);
 
     if (!module) {
       return next(new AppError("Module not found", 404));
     }
 
-    // Handle scheduling logic
-    if (scheduledPublishAt) {
-      const scheduleDate = new Date(scheduledPublishAt);
-      if (scheduleDate > new Date()) {
-        module.scheduledPublishAt = scheduleDate;
-        module.isPublished = false;
-        module.publishedAt = undefined;
-      } else {
-        module.isPublished = true;
-        module.publishedAt = new Date();
-        module.scheduledPublishAt = undefined;
+    try {
+      // Handle Thumbnail Update
+      if (files && files.thumbnail && files.thumbnail[0]) {
+        const file = files.thumbnail[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        const result = await uploadToImgBB(payload as any);
+        module.thumbnail = result.url;
+        if (file.path) deleteLocalFile(file.path);
       }
+
+      // Handle Video Update
+      if (files && files.video && files.video[0]) {
+        const file = files.video[0];
+        const payload = file.buffer ? file.buffer : (file.path as string);
+        const result = await uploadToImgBB(payload as any);
+        module.videoUrl = result.url;
+        if (file.path) deleteLocalFile(file.path);
+      } else if (req.body.videoUrl) {
+        module.videoUrl = req.body.videoUrl;
+      }
+
+      // Update Text Fields
+      if (req.body.title) module.title = req.body.title;
+      if (req.body.titleBn) module.titleBn = req.body.titleBn;
+      if (req.body.description) module.description = req.body.description;
+      if (typeof req.body.isPublished !== "undefined") {
+        const published =
+          req.body.isPublished === "true" || req.body.isPublished === true;
+        module.isPublished = published;
+        module.publishedAt = published ? new Date() : undefined;
+      }
+
+      await module.save();
+
+      res.status(200).json({
+        success: true,
+        data: module,
+        message: "Module updated successfully",
+      });
+    } catch (error: any) {
+      return next(
+        new AppError(error.message || "Failed to update module", 500),
+      );
+    }
+  },
+);
+
+// 4. DELETE MODULE (MISSING FUNCTION)
+export const deleteModule = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { id } = req.params;
+
+    const module = await ModuleModel.findById(id);
+
+    if (!module) {
+      return next(new AppError("Module not found", 404));
     }
 
-    if (title) module.title = title;
-    if (thumbnail) module.thumbnail = thumbnail; // Update thumbnail
-    if (videoUrl) module.videoUrl = videoUrl; // Update videoUrl
+    try {
+      // Optional: Delete all lessons inside this module
+      await Lesson.deleteMany({ module: id });
 
-    if (typeof isPublished === "boolean" && !scheduledPublishAt) {
-      module.isPublished = isPublished;
-      if (isPublished) module.publishedAt = new Date();
+      await module.deleteOne();
+
+      res.status(200).json({
+        success: true,
+        message: "Module deleted successfully",
+      });
+    } catch (error: any) {
+      return next(
+        new AppError(error.message || "Failed to delete module", 500),
+      );
     }
+  },
+);
 
-    await module.save();
+// 5. CREATE LESSON
+export const createLesson = catchAsync(
+  async (req: RequestWithFiles, res: Response, next: NextFunction) => {
+    const { moduleId } = req.params;
+    const module = await ModuleModel.findById(moduleId);
+    if (!module) return next(new AppError("Module not found", 404));
 
-    res.status(200).json({
+    // Determine order
+    const lastLesson = await Lesson.findOne({ module: moduleId }).sort(
+      "-order",
+    );
+    const nextOrder = lastLesson ? lastLesson.order + 1 : 1;
+
+    const lessonData: any = {
+      module: moduleId,
+      title: req.body.title, // { en, bn }
+      videoUrl: req.body.videoUrl,
+      content: req.body.content,
+      order: nextOrder,
+      duration: parseInt(req.body.duration) || 0,
+      resources: req.body.resources ? JSON.parse(req.body.resources) : [],
+      quiz: req.body.quiz ? JSON.parse(req.body.quiz) : [],
+      isFreePreview: req.body.isFreePreview === "true",
+      type: req.body.type || "video",
+    };
+
+    const lesson = await Lesson.create(lessonData);
+
+    res.status(201).json({
       success: true,
-      data: module,
-      message: "Module updated successfully",
+      data: lesson,
     });
   },
 );
 
-export const deleteModule = catchAsync(
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { id } = req.params;
-    const idStr = Array.isArray(id) ? id[0] : id;
+export const getModulesByCourse = getCourseModules;
 
-    await Module.findByIdAndDelete(idStr);
-
-    res.status(200).json({ success: true, message: "Module deleted" });
+// 6. DELETE LESSON
+export const deleteLesson = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const lesson = await Lesson.findByIdAndDelete(req.params.id);
+    if (!lesson) return next(new AppError("Lesson not found", 404));
+    res.status(200).json({ success: true, message: "Lesson deleted" });
   },
 );

@@ -6,26 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadSingle = exports.uploadCourseFiles = void 0;
 // src/middleware/upload.ts
 const multer_1 = __importDefault(require("multer"));
-const path_1 = __importDefault(require("path"));
 const errorHandler_1 = require("./errorHandler");
-// Configure multer storage
-const storage = multer_1.default.diskStorage({
-    destination: (req, file, cb) => {
-        if (file.fieldname === "thumbnail") {
-            cb(null, "uploads/thumbnails/");
-        }
-        else if (file.fieldname === "video") {
-            cb(null, "uploads/videos/");
-        }
-        else {
-            cb(null, "uploads/");
-        }
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, file.fieldname + "-" + uniqueSuffix + path_1.default.extname(file.originalname));
-    },
-});
+// Use memory storage to avoid writing files to disk (better for serverless)
+const storage = multer_1.default.memoryStorage();
 // File filter
 const fileFilter = (req, file, cb) => {
     if (file.fieldname === "thumbnail") {

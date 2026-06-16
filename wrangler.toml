@@ -1,0 +1,8 @@
+name = "langual-academy-backend"
+main = "src/worker.ts"
+compatibility_date = "2026-05-10"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FRONTEND_URL = "https://chalakchamps.com"
+ALLOW_LOCALHOST_ORIGINS = "true"

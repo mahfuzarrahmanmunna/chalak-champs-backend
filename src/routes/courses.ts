@@ -1,8 +1,7 @@
-// src/routes/courses.ts
 import express from "express";
 import {
   createCourse,
-  getCourses,
+  getAllCourses,
   getCourseById,
   updateCourse,
   deleteCourse,
@@ -10,46 +9,37 @@ import {
 } from "../controllers/CourseController";
 import { protect, authorize } from "../middleware/auth";
 import multer from "multer";
-import path from "path";
-import moduleRoutes from "./moduleRoutes";
+import {
+  createLesson,
+  createModule,
+  deleteLesson,
+  deleteModule,
+  getCourseModules,
+  updateModule,
+} from "../controllers/moduleController";
 
-// Multer Config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    if (file.fieldname === "thumbnail") cb(null, "uploads/images/");
-    else if (file.fieldname === "video") cb(null, "uploads/videos/");
-    else cb(null, "uploads/misc/");
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
-    );
-  },
-});
-
+// Use memory storage to avoid filesystem operations (incompatible with Workers)
+const storage = multer.memoryStorage();
 const upload = multer({
-  storage: storage,
+  storage,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
 });
 
 const router = express.Router();
 
-// Public Routes
-router.get("/", getCourses);
+// --- PUBLIC ROUTES ---
+router.get("/", getAllCourses);
 router.get("/:id", getCourseById);
-router.use("/:courseId/modules", moduleRoutes);
 
 // --- PROTECTED ROUTES ---
-router.use(protect); // All routes below this line require authentication
+router.use(protect);
 
 router.get("/instructor/my-courses", getInstructorCourses);
 
 // Create Course
 router.post(
   "/",
-  authorize("instructor", "admin"), // Requires specific role
+  authorize("instructor", "admin"),
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
     { name: "video", maxCount: 1 },
@@ -67,6 +57,41 @@ router.put(
   ]),
   updateCourse,
 );
+
+router.get("/:id/modules", getCourseModules);
+router.post(
+  "/:id/modules",
+  authorize("instructor", "admin"),
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  createModule,
+);
+router.put(
+  "/modules/:id",
+  authorize("instructor", "admin"),
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  updateModule,
+);
+router.delete(
+  "/modules/:id",
+  authorize("instructor", "admin"),
+  deleteModule,
+);
+router.post(
+  "/modules/:moduleId/lessons",
+  authorize("instructor", "admin"),
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  createLesson,
+);
+router.delete("/lessons/:id", authorize("instructor", "admin"), deleteLesson);
 
 // Delete Course
 router.delete("/:id", authorize("instructor", "admin"), deleteCourse);
