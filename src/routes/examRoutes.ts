@@ -1,3 +1,4 @@
+// src/routes/examRoutes.ts
 import express from "express";
 import { protect, authorize } from "../middleware/auth";
 import multer from "multer";

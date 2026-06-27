@@ -1,8 +1,9 @@
+// src/controllers/moduleController.ts
+
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
-// RENAME IMPORT to ModuleModel to avoid conflict with Express Router
 import ModuleModel, { IModule } from "../models/Module";
 import Lesson from "../models/Lesson";
 import { uploadToImgBB, deleteLocalFile } from "../utils/imgbb";
@@ -21,7 +22,9 @@ type MulterFiles = {
 
 type RequestWithFiles = Omit<AuthRequest, "files"> & { files?: MulterFiles };
 
+// =============================================
 // 1. CREATE MODULE
+// =============================================
 export const createModule = catchAsync(
   async (req: RequestWithFiles, res: Response, next: NextFunction) => {
     const courseId = getCourseId(req.params);
@@ -93,20 +96,20 @@ export const createModule = catchAsync(
   },
 );
 
+// =============================================
 // 2. GET MODULES WITH LESSONS
+// =============================================
 export const getCourseModules = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
     const courseId = getCourseId(req.params);
 
     const modules = await ModuleModel.find({ courseId }).sort("order");
 
-    // Fetch lessons for each module
     const moduleIds = modules.map((m: IModule) => m._id);
     const lessons = await Lesson.find({ module: { $in: moduleIds } }).sort(
       "order",
     );
 
-    // Map lessons to their modules
     const modulesWithLessons = modules.map((mod: IModule) => ({
       ...mod.toObject(),
       lessons: lessons.filter(
@@ -121,13 +124,17 @@ export const getCourseModules = catchAsync(
   },
 );
 
-// 3. UPDATE MODULE (MISSING FUNCTION)
+// =============================================
+// 3. UPDATE MODULE
+// =============================================
 export const updateModule = catchAsync(
   async (req: RequestWithFiles, res: Response, next: NextFunction) => {
-    const { id } = req.params;
+    const { moduleId } = req.params;
+
+    // ✅ FIX: Extract files from req.files
     const files = req.files as MulterFiles;
 
-    let module = await ModuleModel.findById(id);
+    let module = await ModuleModel.findById(moduleId);
 
     if (!module) {
       return next(new AppError("Module not found", 404));
@@ -135,19 +142,19 @@ export const updateModule = catchAsync(
 
     try {
       // Handle Thumbnail Update
-      if (files && files.thumbnail && files.thumbnail[0]) {
+      if (files?.thumbnail?.[0]) {
         const file = files.thumbnail[0];
         const payload = file.buffer ? file.buffer : (file.path as string);
-        const result = await uploadToImgBB(payload as any);
+        const result = await uploadToImgBB(payload as Buffer | string);
         module.thumbnail = result.url;
         if (file.path) deleteLocalFile(file.path);
       }
 
       // Handle Video Update
-      if (files && files.video && files.video[0]) {
+      if (files?.video?.[0]) {
         const file = files.video[0];
         const payload = file.buffer ? file.buffer : (file.path as string);
-        const result = await uploadToImgBB(payload as any);
+        const result = await uploadToImgBB(payload as Buffer | string);
         module.videoUrl = result.url;
         if (file.path) deleteLocalFile(file.path);
       } else if (req.body.videoUrl) {
@@ -180,20 +187,22 @@ export const updateModule = catchAsync(
   },
 );
 
-// 4. DELETE MODULE (MISSING FUNCTION)
+// =============================================
+// 4. DELETE MODULE
+// =============================================
 export const deleteModule = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { id } = req.params;
+    const { moduleId } = req.params;
 
-    const module = await ModuleModel.findById(id);
+    const module = await ModuleModel.findById(moduleId);
 
     if (!module) {
       return next(new AppError("Module not found", 404));
     }
 
     try {
-      // Optional: Delete all lessons inside this module
-      await Lesson.deleteMany({ module: id });
+      // Delete all lessons inside this module
+      await Lesson.deleteMany({ module: moduleId });
 
       await module.deleteOne();
 
@@ -209,7 +218,9 @@ export const deleteModule = catchAsync(
   },
 );
 
+// =============================================
 // 5. CREATE LESSON
+// =============================================
 export const createLesson = catchAsync(
   async (req: RequestWithFiles, res: Response, next: NextFunction) => {
     const { moduleId } = req.params;
@@ -244,13 +255,22 @@ export const createLesson = catchAsync(
   },
 );
 
+// Alias for backwards compatibility
 export const getModulesByCourse = getCourseModules;
 
+// =============================================
 // 6. DELETE LESSON
+// =============================================
 export const deleteLesson = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
-    const lesson = await Lesson.findByIdAndDelete(req.params.id);
+    const { lessonId } = req.params;
+
+    const lesson = await Lesson.findByIdAndDelete(lessonId);
     if (!lesson) return next(new AppError("Lesson not found", 404));
-    res.status(200).json({ success: true, message: "Lesson deleted" });
+
+    res.status(200).json({
+      success: true,
+      message: "Lesson deleted successfully",
+    });
   },
 );

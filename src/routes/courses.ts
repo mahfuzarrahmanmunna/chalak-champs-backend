@@ -1,3 +1,5 @@
+// src/routes/courses.ts
+
 import express from "express";
 import {
   createCourse,
@@ -7,18 +9,17 @@ import {
   deleteCourse,
   getInstructorCourses,
 } from "../controllers/CourseController";
-import { protect, authorize } from "../middleware/auth";
-import multer from "multer";
 import {
-  createLesson,
   createModule,
-  deleteLesson,
-  deleteModule,
   getCourseModules,
   updateModule,
+  deleteModule,
+  createLesson,
+  deleteLesson,
 } from "../controllers/moduleController";
+import { protect, authorize } from "../middleware/auth";
+import multer from "multer";
 
-// Use memory storage to avoid filesystem operations (incompatible with Workers)
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -27,16 +28,21 @@ const upload = multer({
 
 const router = express.Router();
 
-// --- PUBLIC ROUTES ---
+// =============================================
+// PUBLIC ROUTES (No auth required)
+// =============================================
 router.get("/", getAllCourses);
 router.get("/:id", getCourseById);
 
-// --- PROTECTED ROUTES ---
+// =============================================
+// PROTECTED ROUTES (Auth required below this line)
+// =============================================
 router.use(protect);
 
+// --- Instructor Routes ---
 router.get("/instructor/my-courses", getInstructorCourses);
 
-// Create Course
+// --- Course CRUD ---
 router.post(
   "/",
   authorize("instructor", "admin"),
@@ -47,7 +53,6 @@ router.post(
   createCourse,
 );
 
-// Update Course
 router.put(
   "/:id",
   authorize("instructor", "admin"),
@@ -58,9 +63,23 @@ router.put(
   updateCourse,
 );
 
-router.get("/:id/modules", getCourseModules);
+router.delete("/:id", authorize("instructor", "admin"), deleteCourse);
+
+// =============================================
+// MODULE ROUTES (Nested under :courseId)
+// These paths MUST match what the frontend calls:
+//   GET    /api/courses/:courseId/modules
+//   POST   /api/courses/:courseId/modules
+//   PUT    /api/courses/:courseId/modules/:moduleId
+//   DELETE /api/courses/:courseId/modules/:moduleId
+// =============================================
+
+// Get all modules for a course (with lessons populated)
+router.get("/:courseId/modules", getCourseModules);
+
+// Create a new module in a course
 router.post(
-  "/:id/modules",
+  "/:courseId/modules",
   authorize("instructor", "admin"),
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
@@ -68,8 +87,11 @@ router.post(
   ]),
   createModule,
 );
+
+// ✅ FIXED: Added :courseId prefix to match frontend
+// Update a specific module
 router.put(
-  "/modules/:id",
+  "/:courseId/modules/:moduleId",
   authorize("instructor", "admin"),
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
@@ -77,13 +99,23 @@ router.put(
   ]),
   updateModule,
 );
+
+// ✅ FIXED: Added :courseId prefix to match frontend
+// Delete a specific module (and its lessons)
 router.delete(
-  "/modules/:id",
+  "/:courseId/modules/:moduleId",
   authorize("instructor", "admin"),
   deleteModule,
 );
+
+// =============================================
+// LESSON ROUTES (Nested under :courseId/modules/:moduleId)
+// =============================================
+
+// ✅ FIXED: Added :courseId prefix to match frontend
+// Create a lesson inside a specific module
 router.post(
-  "/modules/:moduleId/lessons",
+  "/:courseId/modules/:moduleId/lessons",
   authorize("instructor", "admin"),
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
@@ -91,9 +123,12 @@ router.post(
   ]),
   createLesson,
 );
-router.delete("/lessons/:id", authorize("instructor", "admin"), deleteLesson);
 
-// Delete Course
-router.delete("/:id", authorize("instructor", "admin"), deleteCourse);
+// Delete a specific lesson
+router.delete(
+  "/:courseId/modules/:moduleId/lessons/:lessonId",
+  authorize("instructor", "admin"),
+  deleteLesson,
+);
 
 export default router;

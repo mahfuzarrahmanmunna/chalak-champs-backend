@@ -13,6 +13,9 @@ import freeBookingRoutes from "./routes/freeBookingRoutes";
 import examRoutes from "./routes/examRoutes";
 import enrollmentRoutes from "./routes/enrollmentRoutes";
 import { ensureMongoConnected } from "./db/mongo";
+import ctaRoutes from "./routes/ctaRoutes";
+import productRoutes from "./routes/products";
+
 
 /**
  * Builds the Express app (middleware + routes) without calling listen().
@@ -39,8 +42,9 @@ export function createExpressApp() {
     "https://127.0.0.1:3000",
   ];
 
-  const allowedOrigins = [process.env.FRONTEND_URL || "https://chalakchamps.com"]
-    .filter((origin): origin is string => Boolean(origin));
+  const allowedOrigins = [
+    process.env.FRONTEND_URL || "https://chalakchamps.com",
+  ].filter((origin): origin is string => Boolean(origin));
 
   const isDevelopment = process.env.NODE_ENV !== "production";
   const allowLocalhost =
@@ -53,10 +57,7 @@ export function createExpressApp() {
   app.use((req, res, next) => {
     const origin = req.headers.origin as string | undefined;
     if (allowLocalhost || !origin) {
-      res.setHeader(
-        "Access-Control-Allow-Origin",
-        origin || "*",
-      );
+      res.setHeader("Access-Control-Allow-Origin", origin || "*");
     } else if (origin && allowedOrigins.includes(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin);
     }
@@ -113,6 +114,8 @@ export function createExpressApp() {
   app.use("/api/freebookingprops", freeBookingRoutes);
   app.use("/api/exam", examRoutes);
   app.use("/api/enrollments", enrollmentRoutes);
+  app.use("/api/cta", ctaRoutes); // <--- Use the route
+  app.use("/api/products", productRoutes);
 
   app.get("/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date() });
