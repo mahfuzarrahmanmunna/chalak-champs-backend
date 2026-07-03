@@ -99,6 +99,8 @@ export const createModule = catchAsync(
 // =============================================
 // 2. GET MODULES WITH LESSONS
 // =============================================
+// Update the getCourseModules function in moduleController.ts
+
 export const getCourseModules = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
     const courseId = getCourseId(req.params);
@@ -106,9 +108,9 @@ export const getCourseModules = catchAsync(
     const modules = await ModuleModel.find({ courseId }).sort("order");
 
     const moduleIds = modules.map((m: IModule) => m._id);
-    const lessons = await Lesson.find({ module: { $in: moduleIds } }).sort(
-      "order",
-    );
+    const lessons = await Lesson.find({ module: { $in: moduleIds } })
+      .sort("order")
+      .populate("examId"); // ✅ NEW: Populate exam data
 
     const modulesWithLessons = modules.map((mod: IModule) => ({
       ...mod.toObject(),
@@ -274,3 +276,7 @@ export const deleteLesson = catchAsync(
     });
   },
 );
+
+
+// Update the getCourseModules function in moduleController.ts
+

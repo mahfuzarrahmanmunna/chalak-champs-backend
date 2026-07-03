@@ -6,5 +6,8 @@ const router = Router();
 
 // Public route for enrollment
 router.post("/", enrollmentController.createEnrollment);
+router.post("/", enrollmentController.createEnrollment);
+router.get("/user/:identifier", enrollmentController.createEnrollment);
+
 
 export default router;

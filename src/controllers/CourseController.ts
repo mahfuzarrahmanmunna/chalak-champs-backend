@@ -241,12 +241,21 @@ export const updateCourse = catchAsync(
       // Helper to safely parse JSON
       const parseJSON = (value: any) => {
         if (!value) return undefined;
-        try {
-          return JSON.parse(value);
-        } catch (e) {
-          console.error("JSON Parse Error:", e);
-          return value;
+
+        // If it's a string, try to parse it. If it fails, it's an old plain string.
+        if (typeof value === "string") {
+          try {
+            return JSON.parse(value);
+          } catch (e) {
+            // It's an old plain string (e.g., "My Title"), wrap it in the new format!
+            return { en: value, bn: value };
+          }
         }
+
+        // If it's already an object, return it
+        if (typeof value === "object") return value;
+
+        return value;
       };
 
       if (title) course.title = parseJSON(title);

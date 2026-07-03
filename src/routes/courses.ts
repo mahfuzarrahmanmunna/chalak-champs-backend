@@ -14,11 +14,15 @@ import {
   getCourseModules,
   updateModule,
   deleteModule,
-  createLesson,
   deleteLesson,
 } from "../controllers/moduleController";
 import { protect, authorize } from "../middleware/auth";
 import multer from "multer";
+import {
+  getAvailableExams,
+  updateLesson,
+  createLesson,
+} from "../controllers/lessonController";
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -122,6 +126,41 @@ router.post(
     { name: "video", maxCount: 1 },
   ]),
   createLesson,
+);
+
+router.get(
+  "/:courseId/modules/available-exams",
+  authorize("instructor", "admin"),
+  getAvailableExams,
+);
+
+// Create a lesson inside a specific module (UPDATED)
+router.post(
+  "/:courseId/modules/:moduleId/lessons",
+  authorize("instructor", "admin"),
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  createLesson,
+);
+
+// ✅ NEW: Update a lesson
+router.put(
+  "/:courseId/modules/:moduleId/lessons/:lessonId",
+  authorize("instructor", "admin"),
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  updateLesson,
+);
+
+// Delete a specific lesson
+router.delete(
+  "/:courseId/modules/:moduleId/lessons/:lessonId",
+  authorize("instructor", "admin"),
+  deleteLesson,
 );
 
 // Delete a specific lesson

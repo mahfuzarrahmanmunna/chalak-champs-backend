@@ -15,6 +15,9 @@ import enrollmentRoutes from "./routes/enrollmentRoutes";
 import { ensureMongoConnected } from "./db/mongo";
 import ctaRoutes from "./routes/ctaRoutes";
 import productRoutes from "./routes/products";
+import orderRoutes from "./routes/orderRoutes";
+import promoRoutes from "./routes/promoRoutes";
+
 
 
 /**
@@ -116,6 +119,9 @@ export function createExpressApp() {
   app.use("/api/enrollments", enrollmentRoutes);
   app.use("/api/cta", ctaRoutes); // <--- Use the route
   app.use("/api/products", productRoutes);
+
+  app.use("/api/orders", orderRoutes); // ← NEW
+  app.use("/api/promo", promoRoutes); // ← NEW
 
   app.get("/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date() });
