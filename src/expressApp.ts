@@ -17,6 +17,9 @@ import ctaRoutes from "./routes/ctaRoutes";
 import productRoutes from "./routes/products";
 import orderRoutes from "./routes/orderRoutes";
 import promoRoutes from "./routes/promoRoutes";
+import heroRoutes from "./routes/heroRoutes";
+import featureCoursesBannerRoutes from "./routes/featureCoursesBannerRoutes";
+
 
 
 
@@ -120,8 +123,10 @@ export function createExpressApp() {
   app.use("/api/cta", ctaRoutes); // <--- Use the route
   app.use("/api/products", productRoutes);
 
-  app.use("/api/orders", orderRoutes); // ← NEW
-  app.use("/api/promo", promoRoutes); // ← NEW
+  app.use("/api/orders", orderRoutes); 
+  app.use("/api/promo", promoRoutes); 
+  app.use("/api/hero", heroRoutes);
+  app.use("/api/feature-courses-banner", featureCoursesBannerRoutes);
 
   app.get("/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date() });

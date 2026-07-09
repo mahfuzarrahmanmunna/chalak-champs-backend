@@ -18,6 +18,11 @@ const freeBookingRoutes_1 = __importDefault(require("./routes/freeBookingRoutes"
 const examRoutes_1 = __importDefault(require("./routes/examRoutes"));
 const enrollmentRoutes_1 = __importDefault(require("./routes/enrollmentRoutes"));
 const mongo_1 = require("./db/mongo");
+const ctaRoutes_1 = __importDefault(require("./routes/ctaRoutes"));
+const products_1 = __importDefault(require("./routes/products"));
+const orderRoutes_1 = __importDefault(require("./routes/orderRoutes"));
+const promoRoutes_1 = __importDefault(require("./routes/promoRoutes"));
+const heroRoutes_1 = __importDefault(require("./routes/heroRoutes"));
 /**
  * Builds the Express app (middleware + routes) without calling listen().
  * Mongo is ensured on each request — readyState checks are cheap once connected.
@@ -40,8 +45,9 @@ function createExpressApp() {
         "https://localhost:3000",
         "https://127.0.0.1:3000",
     ];
-    const allowedOrigins = [process.env.FRONTEND_URL || "https://chalakchamps.com"]
-        .filter((origin) => Boolean(origin));
+    const allowedOrigins = [
+        process.env.FRONTEND_URL || "https://chalakchamps.com",
+    ].filter((origin) => Boolean(origin));
     const isDevelopment = process.env.NODE_ENV !== "production";
     const allowLocalhost = process.env.ALLOW_LOCALHOST_ORIGINS === "true" || isDevelopment;
     if (allowLocalhost) {
@@ -95,6 +101,11 @@ function createExpressApp() {
     app.use("/api/freebookingprops", freeBookingRoutes_1.default);
     app.use("/api/exam", examRoutes_1.default);
     app.use("/api/enrollments", enrollmentRoutes_1.default);
+    app.use("/api/cta", ctaRoutes_1.default); // <--- Use the route
+    app.use("/api/products", products_1.default);
+    app.use("/api/orders", orderRoutes_1.default);
+    app.use("/api/promo", promoRoutes_1.default);
+    app.use("/api/hero", heroRoutes_1.default);
     app.get("/health", (req, res) => {
         res.json({ status: "OK", timestamp: new Date() });
     });

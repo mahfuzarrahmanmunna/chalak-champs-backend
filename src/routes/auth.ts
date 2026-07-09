@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { authenticate } from "../middleware/auth";
+import { authenticateForRegistration } from "../middleware/authForRegistration";
 import * as authController from "../controllers/authController";
+import { uploadSingleImage, uploadToR2 } from "../middleware/upload";
+import { uploadProfileImage } from "../controllers/profileImageController";
 
 const router = Router();
 
@@ -41,5 +44,14 @@ router.get("/users", authenticate, authController.getAllUsers);
 
 // 10. Get User By ID
 router.get("/users/:id", authenticate, authController.getUserById);
+
+// 11. Example upload route for profile images
+router.post(
+  "/profile-image",
+  authenticateForRegistration,
+  uploadSingleImage("profileImage"),
+  uploadToR2,
+  uploadProfileImage,
+);
 
 export default router;

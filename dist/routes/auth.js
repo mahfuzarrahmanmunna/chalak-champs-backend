@@ -35,7 +35,10 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_1 = require("../middleware/auth");
+const authForRegistration_1 = require("../middleware/authForRegistration");
 const authController = __importStar(require("../controllers/authController"));
+const upload_1 = require("../middleware/upload");
+const profileImageController_1 = require("../controllers/profileImageController");
 const router = (0, express_1.Router)();
 // ================= PUBLIC ROUTES ==================
 // 1. Send Phone Verification Code
@@ -62,4 +65,6 @@ router.post("/verify", auth_1.authenticate, authController.verifyToken);
 router.get("/users", auth_1.authenticate, authController.getAllUsers);
 // 10. Get User By ID
 router.get("/users/:id", auth_1.authenticate, authController.getUserById);
+// 11. Example upload route for profile images
+router.post("/profile-image", authForRegistration_1.authenticateForRegistration, (0, upload_1.uploadSingleImage)("profileImage"), upload_1.uploadToR2, profileImageController_1.uploadProfileImage);
 exports.default = router;

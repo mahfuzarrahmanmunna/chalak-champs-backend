@@ -1,54 +1,83 @@
 // src/middleware/upload.ts
-import multer, { FileFilterCallback } from "multer";
-import path from "path";
-import { Request } from "express";
-import { AppError } from "./errorHandler";
+/// <reference path="../types/express.d.ts" />
+import multer, { FileFilterCallback, MulterError } from "multer";
+import type { NextFunction, Request, Response } from "express";
+import { allowedImageMimeTypes, maxImageSizeBytes } from "../config/r2";
+import { R2Service } from "../services/r2.service";
 
-type StorageFile = { fieldname: string; originalname: string };
-type StorageCb = (err: Error | null, path: string) => void;
-
-// Use memory storage to avoid writing files to disk (better for serverless)
 const storage = multer.memoryStorage();
 
-// File filter
 const fileFilter = (
   req: Request,
-  file: { fieldname: string; mimetype: string },
+  file: Express.Multer.File,
   cb: FileFilterCallback,
 ) => {
-  if (file.fieldname === "thumbnail") {
-    // Accept only image files for thumbnail
-    if (file.mimetype.startsWith("image/")) {
-      cb(null, true);
-    } else {
-      cb(new AppError("Only image files are allowed for thumbnail", 400));
-    }
-  } else if (file.fieldname === "video") {
-    // Accept only video files for video
-    if (file.mimetype.startsWith("video/")) {
-      cb(null, true);
-    } else {
-      cb(new AppError("Only video files are allowed", 400));
-    }
-  } else {
-    cb(new AppError("Unexpected field", 400));
+  if (!file?.mimetype) {
+    cb(new Error("Invalid image upload"));
+    return;
   }
+
+  if (!allowedImageMimeTypes.includes(file.mimetype)) {
+    cb(
+      new Error(
+        "Unsupported image type. Allowed types: jpg, jpeg, png, webp, gif",
+      ),
+    );
+    return;
+  }
+
+  cb(null, true);
 };
 
-// Configure multer
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
+    fileSize: maxImageSizeBytes,
+    files: 1,
   },
 });
 
-// Export upload middleware for course files
-export const uploadCourseFiles = upload.fields([
-  { name: "thumbnail", maxCount: 1 },
-  { name: "video", maxCount: 1 },
-]);
+export const uploadSingleImage = (fieldName = "image") => upload.single(fieldName);
 
-// Export single file upload for other uses
-export const uploadSingle = (fieldName: string) => upload.single(fieldName);
+export const uploadToR2 = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ success: false, message: "No image file provided" });
+      return;
+    }
+
+    if (!req.file.buffer?.length) {
+      res.status(400).json({ success: false, message: "Uploaded image is empty" });
+      return;
+    }
+
+    const folder = (req.body?.folder as string) || "profile";
+    const uploadResult = await R2Service.uploadImage(
+      req.file.buffer,
+      req.file.mimetype,
+      folder,
+    );
+
+    req.imageUrl = uploadResult.url;
+    req.imageKey = uploadResult.key;
+    next();
+  } catch (error) {
+    if (error instanceof MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        res.status(400).json({ success: false, message: "Image too large" });
+        return;
+      }
+
+      res.status(400).json({ success: false, message: error.message });
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : "Image upload failed";
+    res.status(500).json({ success: false, message });
+  }
+};

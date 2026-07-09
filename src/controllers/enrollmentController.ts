@@ -1,80 +1,80 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import Enrollment from "../models/Enrollment";
-import Order from "../models/Order";
 
-// Create a new enrollment
-export const createEnrollment = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const createEnrollment = async (req: any, res: Response) => {
   try {
-    const { name, phone, courseId, courseTitle, amount } = req.body;
+    const { name, phone, email, courseId, courseTitle, amount } = req.body;
 
-    if (!name || !phone || !courseId) {
-      res
-        .status(400)
-        .json({ success: false, message: "Missing required fields" });
-      return;
-    }
-
-    // Check if phone number already enrolled for this course
-    const existingEnrollment = await Enrollment.findOne({ phone, courseId });
-    if (existingEnrollment) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: "You have already enrolled in this course.",
-        });
+    // Only name and phone are required
+    if (!name || !phone || !courseId || !courseTitle) {
+      res.status(400).json({
+        success: false,
+        message: "Please provide name, phone, courseId, and courseTitle",
+      });
       return;
     }
 
     const newEnrollment = new Enrollment({
-      name,
-      phone,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: email ? email.trim() : undefined,
       courseId,
       courseTitle,
-      amount,
+      amount: amount || "0",
     });
 
     await newEnrollment.save();
 
     res.status(201).json({
       success: true,
-      message: "Enrollment successful!",
-      enrollment: newEnrollment,
+      message: "Enrollment submitted successfully!",
     });
   } catch (error: any) {
-    console.error("Enrollment Error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-};
+    console.error("Error creating enrollment:", error);
 
-
-// src/controllers/enrollmentController.ts — add these functions
-
-
-// Get paid orders by Firebase UID
-export const getUserPaidOrders = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const { userId } = req.params;
-
-    if (!userId) {
-      res.status(400).json({ success: false, message: "User ID required" });
+    // Handle mongoose validation errors
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map(
+        (err: any) => err.message,
+      );
+      res.status(400).json({
+        success: false,
+        message: messages.join(", "),
+      });
       return;
     }
 
-    const orders = await Order.find(
-      { userId, status: "paid" },
-      { gatewayResponse: 0 }, // Exclude the large gateway response
-    ).sort({ createdAt: -1 });
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error. Please try again." });
+  }
+};
 
-    res.status(200).json({ success: true, orders });
+export const getAllEnrollments = async (req: any, res: Response) => {
+  try {
+    const enrollments = await Enrollment.find().sort({ createdAt: -1 });
+    res.status(200).json({ success: true, enrollments });
   } catch (error: any) {
-    console.error("Get User Paid Orders Error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch orders" });
+    console.error("Error fetching enrollments:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+export const deleteEnrollment = async (req: any, res: Response) => {
+  try {
+    const { id } = req.params;
+    const deletedEnrollment = await Enrollment.findByIdAndDelete(id);
+
+    if (!deletedEnrollment) {
+      res.status(404).json({ success: false, message: "Enrollment not found" });
+      return;
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: "Enrollment deleted successfully" });
+  } catch (error: any) {
+    console.error("Error deleting enrollment:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 };

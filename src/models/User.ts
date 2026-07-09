@@ -9,6 +9,8 @@ export interface IUser extends Document {
   email?: string;
   phoneNumber?: string;
   role: 'student' | 'teacher' | 'admin';
+  profileImageUrl?: string;
+  profileImageKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,6 +41,8 @@ const UserSchema: Schema = new Schema(
       unique: true,
     },
     role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
+    profileImageUrl: { type: String, default: "" },
+    profileImageKey: { type: String, default: "" },
   },
   {
     timestamps: true,

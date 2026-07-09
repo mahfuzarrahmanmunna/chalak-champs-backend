@@ -35,16 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const EnrollmentSchema = new mongoose_1.Schema({
-    courseId: { type: String, required: true },
-    courseTitle: { type: String, required: true },
     name: { type: String, required: true },
     phone: { type: String, required: true },
+    email: { type: String, required: false, default: undefined },
+    courseId: { type: String, required: true },
+    courseTitle: { type: String, required: true },
     amount: { type: String, required: true },
-    status: {
-        type: String,
-        enum: ["pending", "completed", "cancelled"],
-        default: "pending",
-    },
 }, {
     timestamps: true,
 });

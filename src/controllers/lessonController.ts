@@ -33,7 +33,9 @@ const parseJSON = (value: any) => {
 // =============================================
 export const createLesson = catchAsync(
   async (req: RequestWithFiles, res: Response, next: NextFunction) => {
-    const { moduleId } = req.params;
+    const moduleId = Array.isArray(req.params.moduleId)
+      ? req.params.moduleId[0]
+      : req.params.moduleId;
 
     // Verify module exists
     const Module = (await import("../models/Module")).default;

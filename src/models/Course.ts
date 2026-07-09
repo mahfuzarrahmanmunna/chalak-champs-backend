@@ -80,43 +80,26 @@ const CourseSchema: Schema = new Schema(
     thumbnailDeleteUrl: { type: String },
     videoUrl: { type: String },
     videoDeleteUrl: { type: String },
-    quickInfo: { type: [String], default: [] },
+    // Accept flexible structured quickInfo (object with bilingual title, items, etc.)
+    quickInfo: { type: Schema.Types.Mixed, default: [] },
     offerDetails: { type: String },
     courseOverview: { type: String },
 
     // ✅ UPDATED: Nested fields now use BilingualSchema
-    levels: [
-      {
-        title: { type: BilingualSchema, default: { en: "", bn: "" } },
-        description: { type: BilingualSchema, default: { en: "", bn: "" } },
-        target: { type: BilingualSchema, default: { en: "", bn: "" } }, // Matches frontend "target"
-        topics: { type: [String], default: [] },
-      },
-    ],
+    // Accept flexible levels structure from frontend (may contain level1/level2 nested objects)
+    levels: { type: Schema.Types.Mixed, default: [] },
 
     // ✅ UPDATED: Nested fields now use BilingualSchema
-    features: [
-      {
-        title: { type: BilingualSchema, default: { en: "", bn: "" } },
-        desc: { type: BilingualSchema, default: { en: "", bn: "" } }, // Matches frontend "desc"
-      },
-    ],
+    features: { type: Schema.Types.Mixed, default: [] },
 
     // ✅ Kept as simple strings because your frontend strips the bn object for FAQs
-    faqs: [
-      {
-        question: { type: String, default: "" },
-        answer: { type: String, default: "" },
-      },
-    ],
+    faqs: { type: Schema.Types.Mixed, default: [] },
 
     category: { type: String },
 
     // ✅ FIXED: Changed to lowercase to match frontend select values
-    level: {
-      type: String,
-      enum: ["beginner", "intermediate", "advanced", "all"],
-    },
+    // Keep level as open string to accept a wider set of frontend values
+    level: { type: String },
 
     isPublished: { type: Boolean, default: false },
     publishedAt: { type: Date },

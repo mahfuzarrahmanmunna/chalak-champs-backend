@@ -60,6 +60,8 @@ const UserSchema = new mongoose_1.Schema({
         unique: true,
     },
     role: { type: String, enum: ['student', 'teacher', 'admin'], default: 'student' },
+    profileImageUrl: { type: String, default: "" },
+    profileImageKey: { type: String, default: "" },
 }, {
     timestamps: true,
 });

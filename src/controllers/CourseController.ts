@@ -55,36 +55,73 @@ export const createCourse = catchAsync(
 
       // 3. Parse JSON Data (Sent as strings from FormData)
       const parseJSON = (value: any) => {
-        if (!value) return undefined;
+        if (value === undefined || value === null) return undefined;
+        // If already an object/array, return as-is
+        if (typeof value === "object") return value;
+        if (typeof value !== "string") return value;
+
+        // Try JSON.parse directly
         try {
           return JSON.parse(value);
         } catch (e) {
-          console.error("JSON Parse Error:", e);
-          return value; // return raw value if parse fails
+          // If that fails, try a heuristic: replace single quotes with double quotes
+          try {
+            const swapped = value.replace(/\'/g, '"');
+            return JSON.parse(swapped);
+          } catch (e2) {
+            // Not valid JSON — return a sensible fallback: return bilingual wrapper
+            // e.g., treat 'Hello' as {en: 'Hello', bn: 'Hello'}
+            return { en: value, bn: value };
+          }
         }
       };
 
+      // Support frontend sending all structured data as a single `courseData` JSON field
+      let incoming = { ...req.body } as any;
+      if (req.body.courseData) {
+        try {
+          const parsed = JSON.parse(req.body.courseData);
+          incoming = { ...incoming, ...parsed };
+        } catch (e) {
+          // leave incoming as-is; parseJSON will handle individual fields below
+        }
+      }
+
+      const rawPrice = incoming.price ?? incoming.price === 0 ? incoming.price : req.body.price;
+      const parsedPrice = rawPrice !== undefined ? parseFloat(String(rawPrice)) : undefined;
+      if (parsedPrice !== undefined && Number.isNaN(parsedPrice)) {
+        return next(new AppError("Invalid price provided", 400));
+      }
+
+      const rawOriginalPrice = incoming.originalPrice ?? req.body.originalPrice;
+      const parsedOriginalPrice = rawOriginalPrice ? parseFloat(String(rawOriginalPrice)) : undefined;
+
+      // Ensure `title` exists: accept `title` or fallback to `hero.title` from frontend
+      let parsedTitle = parseJSON(incoming.title) ?? (incoming.hero?.title ?? undefined);
+
+      if (!parsedTitle || !parsedTitle.en) {
+        return next(new AppError("Course title is required (hero.title.en)", 400));
+      }
+
       const courseData: any = {
-        ...req.body,
-        instructor: user?._id || req.body.instructor,
-        price: parseFloat(req.body.price),
-        originalPrice: req.body.originalPrice
-          ? parseFloat(req.body.originalPrice)
-          : undefined,
+        ...incoming,
+        instructor: user?._id || incoming.instructor,
+        price: parsedPrice,
+        originalPrice: parsedOriginalPrice,
 
         // Parse Bilingual/Array fields
-        title: parseJSON(req.body.title),
-        heroSubtitle: parseJSON(req.body.heroSubtitle),
-        quickInfo: parseJSON(req.body.quickInfo) || [],
-        levels: parseJSON(req.body.levels) || [],
-        features: parseJSON(req.body.features) || [],
-        faqs: parseJSON(req.body.faqs) || [],
-        resources: parseJSON(req.body.resources) || [],
+        title: parsedTitle,
+        heroSubtitle: parseJSON(incoming.heroSubtitle),
+        quickInfo: parseJSON(incoming.quickInfo) || [],
+        levels: parseJSON(incoming.levels) || [],
+        features: parseJSON(incoming.features) || [],
+        faqs: parseJSON(incoming.faqs) || [],
+        resources: parseJSON(incoming.resources) || [],
 
-        // ✅ FIX: Save Quill HTML from the admin form into a localized description object
+        // Save Quill HTML from the admin form into a localized description object
         description: {
-          en: req.body.contentEn || "",
-          bn: req.body.contentBn || "",
+          en: incoming.contentEn || incoming.content?.en || "",
+          bn: incoming.contentBn || incoming.content?.bn || "",
         },
 
         // Save ImgBB URLs
@@ -240,22 +277,20 @@ export const updateCourse = catchAsync(
 
       // Helper to safely parse JSON
       const parseJSON = (value: any) => {
-        if (!value) return undefined;
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === "object") return value;
+        if (typeof value !== "string") return value;
 
-        // If it's a string, try to parse it. If it fails, it's an old plain string.
-        if (typeof value === "string") {
+        try {
+          return JSON.parse(value);
+        } catch (e) {
           try {
-            return JSON.parse(value);
-          } catch (e) {
-            // It's an old plain string (e.g., "My Title"), wrap it in the new format!
+            const swapped = value.replace(/\'/g, '"');
+            return JSON.parse(swapped);
+          } catch (e2) {
             return { en: value, bn: value };
           }
         }
-
-        // If it's already an object, return it
-        if (typeof value === "object") return value;
-
-        return value;
       };
 
       if (title) course.title = parseJSON(title);

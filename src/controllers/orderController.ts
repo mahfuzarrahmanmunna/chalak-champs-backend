@@ -366,7 +366,6 @@ export const verifyOrder = async (
           courseId: order.courseId,
           courseTitle: order.courseTitle,
           amount: order.totalAmount.toString(),
-          status: "completed",
         });
         console.log(
           `Enrollment created for ${order.userName} in ${order.courseTitle}`,
@@ -444,7 +443,6 @@ export const handleIPN = async (req: Request, res: Response): Promise<void> => {
             courseId: order.courseId,
             courseTitle: order.courseTitle,
             amount: order.totalAmount.toString(),
-            status: "completed",
           });
         }
       } catch {

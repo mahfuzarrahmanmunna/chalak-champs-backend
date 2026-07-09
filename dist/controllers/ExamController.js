@@ -106,7 +106,9 @@ exports.getExams = (0, errorHandler_1.catchAsync)(async (_req, res, _next) => {
     res.status(200).json({ success: true, data: exams });
 });
 exports.startExam = (0, errorHandler_1.catchAsync)(async (req, res, next) => {
-    const { examId } = req.params;
+    const examId = Array.isArray(req.params.examId)
+        ? req.params.examId[0]
+        : req.params.examId;
     const userId = req.user?._id;
     const exam = await Exam_1.default.findById(examId).populate("questionBank");
     if (!exam)

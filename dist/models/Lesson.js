@@ -1,4 +1,5 @@
 "use strict";
+// src/models/Lesson.ts
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -35,31 +36,44 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const LessonSchema = new mongoose_1.Schema({
-    module: { type: mongoose_1.Schema.Types.ObjectId, ref: "Module", required: true },
-    // Schema Type Change to Mixed/Object
-    title: {
-        type: mongoose_1.Schema.Types.Mixed,
+    module: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "Module",
         required: true,
-        default: { en: "", bn: "" },
+        index: true,
+    },
+    title: {
+        en: { type: String, required: true, default: "" },
+        bn: { type: String, default: "" },
+    },
+    type: {
+        type: String,
+        enum: ["video", "pdf", "exam", "capstone", "article"],
+        default: "video",
+        required: true,
     },
     videoUrl: { type: String },
-    content: {
-        type: mongoose_1.Schema.Types.Mixed,
-        required: true,
-        default: { blocks: [] },
-    },
+    content: { type: String },
     order: { type: Number, required: true, default: 0 },
     duration: { type: Number, default: 0 },
-    resources: [{ type: String }],
-    quiz: [
-        {
-            questionText: { type: String, required: true },
-            options: [{ type: String, required: true }],
-            correctAnswer: { type: Number, required: true },
-        },
-    ],
     isFreePreview: { type: Boolean, default: false },
+    resources: [{ type: mongoose_1.Schema.Types.Mixed }],
+    quiz: [{ type: mongoose_1.Schema.Types.Mixed }],
+    // ✅ NEW: Exam integration fields
+    examId: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "Exam",
+        default: null,
+    },
+    examConfig: {
+        duration: { type: Number, default: 60 },
+        passingMarks: { type: Number, default: 50 },
+        negativeMarking: { type: Number, default: 0 },
+        isProctored: { type: Boolean, default: true },
+        totalQuestions: { type: Number, default: 0 },
+        totalMarks: { type: Number, default: 0 },
+    },
 }, { timestamps: true });
-LessonSchema.index({ module: 1, order: 1 });
-const Lesson = mongoose_1.default.model("Lesson", LessonSchema);
-exports.default = Lesson;
+// Index for querying lessons by exam
+LessonSchema.index({ examId: 1 });
+exports.default = mongoose_1.default.model("Lesson", LessonSchema);

@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const enrollmentController = __importStar(require("../controllers/enrollmentController"));
 const router = (0, express_1.Router)();
-// Public route for enrollment
 router.post("/", enrollmentController.createEnrollment);
+router.get("/", enrollmentController.getAllEnrollments);
+router.delete("/:id", enrollmentController.deleteEnrollment);
 exports.default = router;

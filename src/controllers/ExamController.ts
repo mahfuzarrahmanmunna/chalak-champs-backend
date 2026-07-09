@@ -139,7 +139,9 @@ export const getExams = catchAsync(
 
 export const startExam = catchAsync(
   async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const { examId } = req.params;
+    const examId = Array.isArray(req.params.examId)
+      ? req.params.examId[0]
+      : req.params.examId;
     const userId = req.user?._id;
 
     const exam = await Exam.findById(examId).populate("questionBank");

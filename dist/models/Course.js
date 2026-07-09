@@ -34,53 +34,42 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
+// --- Reusable Bilingual Schema ---
+const BilingualSchema = new mongoose_1.Schema({
+    en: { type: String, default: "" },
+    bn: { type: String, default: "" },
+}, { _id: false });
 const CourseSchema = new mongoose_1.Schema({
-    title: { type: String, required: true },
-    heroSubtitle: { type: String, required: true },
-    description: {
-        en: { type: String, default: "" },
-        bn: { type: String, default: "" },
-    },
+    // ✅ UPDATED: Now accepts { en: "", bn: "" }
+    title: { type: BilingualSchema, required: true },
+    // ✅ UPDATED: Now accepts { en: "", bn: "" } (Made optional to prevent errors on empty forms)
+    heroSubtitle: { type: BilingualSchema },
+    // Already bilingual, no changes needed
+    description: { type: BilingualSchema, default: { en: "", bn: "" } },
     instructor: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
-    instructorName: { type: String }, // <--- ADDED THIS
-    duration: { type: String }, // <--- ADDED THIS
+    instructorName: { type: String },
+    duration: { type: String },
     price: { type: Number, required: true },
     originalPrice: { type: Number },
     thumbnail: { type: String },
     thumbnailDeleteUrl: { type: String },
     videoUrl: { type: String },
     videoDeleteUrl: { type: String },
-    quickInfo: { type: [String], default: [] },
+    // Accept flexible structured quickInfo (object with bilingual title, items, etc.)
+    quickInfo: { type: mongoose_1.Schema.Types.Mixed, default: [] },
     offerDetails: { type: String },
     courseOverview: { type: String },
-    levels: [
-        {
-            title: String,
-            description: String,
-            targetAudience: String,
-            topics: [String],
-        },
-    ],
-    features: [
-        {
-            title: String,
-            description: {
-                en: { type: String, default: "" },
-                bn: { type: String, default: "" },
-            },
-        },
-    ],
-    faqs: [
-        {
-            question: String,
-            answer: String,
-        },
-    ],
+    // ✅ UPDATED: Nested fields now use BilingualSchema
+    // Accept flexible levels structure from frontend (may contain level1/level2 nested objects)
+    levels: { type: mongoose_1.Schema.Types.Mixed, default: [] },
+    // ✅ UPDATED: Nested fields now use BilingualSchema
+    features: { type: mongoose_1.Schema.Types.Mixed, default: [] },
+    // ✅ Kept as simple strings because your frontend strips the bn object for FAQs
+    faqs: { type: mongoose_1.Schema.Types.Mixed, default: [] },
     category: { type: String },
-    level: {
-        type: String,
-        enum: ["Beginner", "Intermediate", "Advanced"],
-    },
+    // ✅ FIXED: Changed to lowercase to match frontend select values
+    // Keep level as open string to accept a wider set of frontend values
+    level: { type: String },
     isPublished: { type: Boolean, default: false },
     publishedAt: { type: Date },
 }, { timestamps: true });
