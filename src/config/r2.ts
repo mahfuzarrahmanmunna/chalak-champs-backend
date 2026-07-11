@@ -1,7 +1,8 @@
+import path from "path";
 import { S3Client } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 const requiredEnvVars = [
   "R2_ACCOUNT_ID",

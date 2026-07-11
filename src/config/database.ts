@@ -1,8 +1,9 @@
 // src/config/database.ts
+import path from "path";
 import mongoose from "mongoose";
 import * as dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 export const connectDB = async (): Promise<void> => {
   try {

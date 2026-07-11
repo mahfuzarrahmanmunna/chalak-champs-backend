@@ -1,9 +1,6 @@
 import express from "express";
 import { google } from "googleapis";
 import nodemailer from "nodemailer";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const router = express.Router();
 

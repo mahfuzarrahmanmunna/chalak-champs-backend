@@ -6,13 +6,13 @@ import morgan from "morgan";
 import path from "path";
 import dotenv from "dotenv";
 
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
 import courseRoutes from "./routes/courses";
 import authRoutes from "./routes/auth";
 // REMOVED: import { connectDB } from "./config/database";
 import { errorHandler, notFound } from "./middleware/errorHandler";
 import { logger, morganStream } from "./utils/logger";
-
-dotenv.config();
 
 const app = express();
 
