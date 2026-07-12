@@ -4,11 +4,25 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteBooking = exports.getAllBookings = exports.createBooking = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const FreeBooking_1 = __importDefault(require("../models/FreeBooking"));
+const ensureDbConnection = (res) => {
+    if (mongoose_1.default.connection.readyState !== 1) {
+        res.status(503).json({
+            success: false,
+            message: "Database is currently unavailable. Please try again shortly.",
+        });
+        return false;
+    }
+    return true;
+};
 const createBooking = async (req, res) => {
     try {
         const { studentName, guardianName, phone, countryCode, fullPhone, studentClass, course, } = req.body;
         // Basic validation
+        if (!ensureDbConnection(res)) {
+            return;
+        }
         if (!studentName ||
             !guardianName ||
             !phone ||
@@ -47,6 +61,9 @@ const createBooking = async (req, res) => {
 exports.createBooking = createBooking;
 const getAllBookings = async (req, res) => {
     try {
+        if (!ensureDbConnection(res)) {
+            return;
+        }
         const bookings = await FreeBooking_1.default.find().sort({ createdAt: -1 });
         res.status(200).json({ success: true, bookings });
     }
@@ -59,6 +76,9 @@ exports.getAllBookings = getAllBookings;
 // Delete a Booking
 const deleteBooking = async (req, res) => {
     try {
+        if (!ensureDbConnection(res)) {
+            return;
+        }
         const { id } = req.params;
         const deletedBooking = await FreeBooking_1.default.findByIdAndDelete(id);
         if (!deletedBooking) {

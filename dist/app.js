@@ -10,12 +10,12 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const path_1 = __importDefault(require("path"));
 const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), ".env") });
 const courses_1 = __importDefault(require("./routes/courses"));
 const auth_1 = __importDefault(require("./routes/auth"));
 // REMOVED: import { connectDB } from "./config/database";
 const errorHandler_1 = require("./middleware/errorHandler");
 const logger_1 = require("./utils/logger");
-dotenv_1.default.config();
 const app = (0, express_1.default)();
 // REMOVED: connectDB();  <-- Do NOT connect here. Let index.ts handle it.
 // Middleware

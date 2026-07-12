@@ -9,13 +9,22 @@ const nodemailer_1 = __importDefault(require("nodemailer"));
 const verificationCodes = {};
 let transporterSingleton = null;
 function getTransporter() {
-    transporterSingleton ?? (transporterSingleton = nodemailer_1.default.createTransport({
-        service: "gmail",
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-        },
-    }));
+    if (transporterSingleton)
+        return transporterSingleton;
+    const user = process.env.EMAIL_USER?.trim();
+    const pass = process.env.EMAIL_PASS?.replace(/\s+/g, "");
+    if (!user || !pass) {
+        console.warn("EMAIL_USER or EMAIL_PASS not set. Using JSON transport (emails will not be sent).");
+        transporterSingleton = nodemailer_1.default.createTransport({ jsonTransport: true });
+        return transporterSingleton;
+    }
+    transporterSingleton = nodemailer_1.default.createTransport({
+        host: "smtp.gmail.com",
+        port: 587,
+        secure: false,
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false },
+    });
     return transporterSingleton;
 }
 // Generate a 6-digit verification code
@@ -26,6 +35,10 @@ exports.generateVerificationCode = generateVerificationCode;
 // Send verification email
 const sendVerificationEmail = async (email) => {
     try {
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.error("SMTP credentials not configured. Set EMAIL_USER and EMAIL_PASS in environment.");
+            return { success: false, message: "SMTP credentials not configured" };
+        }
         // Generate a verification code
         const code = (0, exports.generateVerificationCode)();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Code expires in 10 minutes

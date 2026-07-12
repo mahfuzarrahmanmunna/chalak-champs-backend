@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadToR2 = exports.uploadSingleImage = void 0;
 // src/middleware/upload.ts
+/// <reference path="../types/express.d.ts" />
 const multer_1 = __importStar(require("multer"));
 const r2_1 = require("../config/r2");
 const r2_service_1 = require("../services/r2.service");

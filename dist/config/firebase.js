@@ -4,14 +4,42 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.auth = void 0;
+const path_1 = __importDefault(require("path"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
-dotenv_1.default.config();
+dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), ".env") });
 function firebaseEnvReady() {
-    const pid = process.env.FIREBASE_PROJECT_ID?.trim();
-    const email = process.env.FIREBASE_CLIENT_EMAIL?.trim();
-    const pk = process.env.FIREBASE_PRIVATE_KEY?.trim();
-    return Boolean(pid && email && pk);
+    return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() ||
+        (process.env.FIREBASE_PROJECT_ID?.trim() &&
+            process.env.FIREBASE_CLIENT_EMAIL?.trim() &&
+            process.env.FIREBASE_PRIVATE_KEY?.trim()) ||
+        process.env.GOOGLE_APPLICATION_CREDENTIALS);
+}
+function getFirebaseServiceAccount() {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+        try {
+            const parsed = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+            return {
+                projectId: parsed.project_id,
+                privateKey: parsed.private_key,
+                clientEmail: parsed.client_email,
+            };
+        }
+        catch (error) {
+            console.error("Invalid FIREBASE_SERVICE_ACCOUNT_JSON:", error);
+            return null;
+        }
+    }
+    if (process.env.FIREBASE_PROJECT_ID &&
+        process.env.FIREBASE_CLIENT_EMAIL &&
+        process.env.FIREBASE_PRIVATE_KEY) {
+        return {
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        };
+    }
+    return null;
 }
 /** Lazy init — skipped when env vars are absent (Workers upload validation / local without .env). */
 function ensureFirebaseApp() {
@@ -21,20 +49,15 @@ function ensureFirebaseApp() {
     if (firebase_admin_1.default.apps.length > 0) {
         return firebase_admin_1.default;
     }
-    const serviceAccount = {
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        privateKeyId: process.env.FIREBASE_PRIVATE_KEY_ID,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        clientId: process.env.FIREBASE_CLIENT_ID,
-        authUri: process.env.FIREBASE_AUTH_URI,
-        tokenUri: process.env.FIREBASE_TOKEN_URI,
-        authProviderX509CertUrl: process.env.FIREBASE_AUTH_PROVIDER_CERT_URL,
-        clientX509CertUrl: process.env.FIREBASE_CLIENT_CERT_URL,
-    };
-    firebase_admin_1.default.initializeApp({
-        credential: firebase_admin_1.default.credential.cert(serviceAccount),
-    });
+    const serviceAccount = getFirebaseServiceAccount();
+    if (serviceAccount) {
+        firebase_admin_1.default.initializeApp({
+            credential: firebase_admin_1.default.credential.cert(serviceAccount),
+        });
+    }
+    else {
+        firebase_admin_1.default.initializeApp();
+    }
     return firebase_admin_1.default;
 }
 /**

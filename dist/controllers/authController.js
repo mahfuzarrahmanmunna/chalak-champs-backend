@@ -77,6 +77,13 @@ const sendEmailVerification = async (req, res) => {
             return;
         }
         const result = await (0, emailService_1.sendVerificationEmail)(email);
+        if (!result.success) {
+            res.status(500).json({
+                success: false,
+                message: result.message || "Failed to send verification code",
+            });
+            return;
+        }
         res.status(200).json({
             success: true,
             message: result.message || "Verification code sent to your email",
@@ -219,12 +226,25 @@ const register = async (req, res) => {
         });
         await user.save();
         // Send verification emails/SMS if needed
-        // FIX: Use the correct "Send" functions
+        const verificationErrors = [];
         if (email) {
-            await (0, emailService_1.sendVerificationEmail)(email);
+            const emailResult = await (0, emailService_1.sendVerificationEmail)(email);
+            if (!emailResult.success) {
+                verificationErrors.push(`Email verification failed: ${emailResult.message || "Unable to send email"}`);
+            }
         }
         if (phoneNumber) {
-            await (0, phoneService_1.sendPhoneVerification)(phoneNumber);
+            const phoneResult = await (0, phoneService_1.sendPhoneVerification)(phoneNumber);
+            if (!phoneResult.success) {
+                verificationErrors.push(`Phone verification failed: ${phoneResult.message || "Unable to send SMS"}`);
+            }
+        }
+        if (verificationErrors.length > 0) {
+            res.status(500).json({
+                success: false,
+                message: verificationErrors.join("; "),
+            });
+            return;
         }
         res.status(201).json({
             success: true,

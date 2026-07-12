@@ -1,6 +1,18 @@
 // src/controllers/freeBookingController.ts
 import { Response } from "express";
+import mongoose from "mongoose";
 import FreeBooking from "../models/FreeBooking";
+
+const ensureDbConnection = (res: Response) => {
+  if (mongoose.connection.readyState !== 1) {
+    res.status(503).json({
+      success: false,
+      message: "Database is currently unavailable. Please try again shortly.",
+    });
+    return false;
+  }
+  return true;
+};
 
 export const createBooking = async (req: any, res: Response) => {
   try {
@@ -15,6 +27,10 @@ export const createBooking = async (req: any, res: Response) => {
     } = req.body;
 
     // Basic validation
+    if (!ensureDbConnection(res)) {
+      return;
+    }
+
     if (
       !studentName ||
       !guardianName ||
@@ -57,6 +73,10 @@ export const createBooking = async (req: any, res: Response) => {
 
 export const getAllBookings = async (req: any, res: Response) => {
   try {
+    if (!ensureDbConnection(res)) {
+      return;
+    }
+
     const bookings = await FreeBooking.find().sort({ createdAt: -1 });
     res.status(200).json({ success: true, bookings });
   } catch (error: any) {
@@ -68,6 +88,10 @@ export const getAllBookings = async (req: any, res: Response) => {
 // Delete a Booking
 export const deleteBooking = async (req: any, res: Response) => {
   try {
+    if (!ensureDbConnection(res)) {
+      return;
+    }
+
     const { id } = req.params;
     const deletedBooking = await FreeBooking.findByIdAndDelete(id);
 

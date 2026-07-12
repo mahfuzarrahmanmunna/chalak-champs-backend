@@ -38,9 +38,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.disconnectDB = exports.connectDB = void 0;
 // src/config/database.ts
+const path_1 = __importDefault(require("path"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const dotenv = __importStar(require("dotenv"));
-dotenv.config();
+dotenv.config({ path: path_1.default.resolve(process.cwd(), ".env") });
 const connectDB = async () => {
     try {
         const mongoURI = process.env.MONGODB_URI;

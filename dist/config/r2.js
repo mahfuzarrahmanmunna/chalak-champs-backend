@@ -4,9 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.allowedImageMimeTypes = exports.maxImageSizeBytes = exports.r2PublicUrl = exports.r2BucketName = exports.r2Client = void 0;
+const path_1 = __importDefault(require("path"));
 const client_s3_1 = require("@aws-sdk/client-s3");
 const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config();
+dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), ".env") });
 const requiredEnvVars = [
     "R2_ACCOUNT_ID",
     "R2_ACCESS_KEY_ID",

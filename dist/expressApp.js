@@ -23,6 +23,7 @@ const products_1 = __importDefault(require("./routes/products"));
 const orderRoutes_1 = __importDefault(require("./routes/orderRoutes"));
 const promoRoutes_1 = __importDefault(require("./routes/promoRoutes"));
 const heroRoutes_1 = __importDefault(require("./routes/heroRoutes"));
+const featureCoursesBannerRoutes_1 = __importDefault(require("./routes/featureCoursesBannerRoutes"));
 /**
  * Builds the Express app (middleware + routes) without calling listen().
  * Mongo is ensured on each request — readyState checks are cheap once connected.
@@ -106,6 +107,7 @@ function createExpressApp() {
     app.use("/api/orders", orderRoutes_1.default);
     app.use("/api/promo", promoRoutes_1.default);
     app.use("/api/hero", heroRoutes_1.default);
+    app.use("/api/feature-courses-banner", featureCoursesBannerRoutes_1.default);
     app.get("/health", (req, res) => {
         res.json({ status: "OK", timestamp: new Date() });
     });
