@@ -1,18 +1,19 @@
+// src/services/r2.service.ts
 import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 import { r2BucketName, r2Client, r2PublicUrl } from "../config/r2";
 
-export interface UploadImageResult {
+export interface UploadResult {
   url: string;
   key: string;
 }
 
 export class R2Service {
-  static async uploadImage(
+  static async uploadFile(
     fileBuffer: Buffer,
     mimeType: string,
     folder: string,
-  ): Promise<UploadImageResult> {
+  ): Promise<UploadResult> {
     if (!fileBuffer?.length) {
       throw new Error("No file buffer provided");
     }
@@ -35,7 +36,16 @@ export class R2Service {
     return { url, key };
   }
 
-  static async deleteImage(key: string): Promise<void> {
+  // Keep old name as alias for backwards compatibility
+  static async uploadImage(
+    fileBuffer: Buffer,
+    mimeType: string,
+    folder: string,
+  ): Promise<UploadResult> {
+    return this.uploadFile(fileBuffer, mimeType, folder);
+  }
+
+  static async deleteFile(key: string): Promise<void> {
     if (!key) {
       return;
     }
@@ -48,13 +58,19 @@ export class R2Service {
     );
   }
 
+  // Keep old name as alias
+  static async deleteImage(key: string): Promise<void> {
+    return this.deleteFile(key);
+  }
+
   static generateUniqueKey(folder: string, extension: string): string {
     const safeFolder = folder.replace(/^\/+|\/+$/g, "");
     return `${safeFolder}/${randomUUID()}.${extension}`;
   }
 
-  private static getExtensionFromMimeType(mimeType: string): string {
+  static getExtensionFromMimeType(mimeType: string): string {
     switch (mimeType) {
+      // Images
       case "image/jpeg":
         return "jpg";
       case "image/png":
@@ -63,13 +79,38 @@ export class R2Service {
         return "webp";
       case "image/gif":
         return "gif";
+      // Videos
+      case "video/mp4":
+        return "mp4";
+      case "video/webm":
+        return "webm";
+      case "video/quicktime":
+        return "mov";
       default:
-        throw new Error("Unsupported image type");
+        // Fallback: extract from mimetype
+        const ext = mimeType.split("/")[1]?.split(";")[0];
+        return ext || "bin";
     }
   }
 
-  private static buildPublicUrl(key: string): string {
+  static buildPublicUrl(key: string): string {
     const baseUrl = r2PublicUrl.replace(/\/$/, "");
     return `${baseUrl}/${key}`;
+  }
+
+  static extractKeyFromUrl(url: string): string {
+    if (!url) return "";
+    try {
+      const baseUrl = r2PublicUrl.replace(/\/$/, "");
+      if (url.startsWith(baseUrl)) {
+        return url.slice(baseUrl.length + 1); // +1 for the slash
+      }
+      // Try parsing as full URL
+      const urlObj = new URL(url);
+      return urlObj.pathname.slice(1); // Remove leading slash
+    } catch {
+      // Fallback: just return the URL as-is
+      return url;
+    }
   }
 }

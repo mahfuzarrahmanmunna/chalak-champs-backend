@@ -123,8 +123,8 @@ export function createExpressApp() {
   app.use("/api/cta", ctaRoutes); // <--- Use the route
   app.use("/api/products", productRoutes);
 
-  app.use("/api/orders", orderRoutes); 
-  app.use("/api/promo", promoRoutes); 
+  app.use("/api/orders", orderRoutes);
+  app.use("/api/promo", promoRoutes);
   app.use("/api/hero", heroRoutes);
   app.use("/api/feature-courses-banner", featureCoursesBannerRoutes);
 

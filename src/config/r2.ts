@@ -1,3 +1,4 @@
+// src/config/r2.ts
 import path from "path";
 import { S3Client } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
@@ -30,5 +31,24 @@ export const r2Client = new S3Client({
 
 export const r2BucketName = process.env.R2_BUCKET_NAME || "";
 export const r2PublicUrl = process.env.R2_PUBLIC_URL || "";
-export const maxImageSizeBytes = Number(process.env.R2_MAX_IMAGE_SIZE_BYTES || 5 * 1024 * 1024);
-export const allowedImageMimeTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+export const maxImageSizeBytes = Number(
+  process.env.R2_MAX_IMAGE_SIZE_BYTES || 5 * 1024 * 1024,
+);
+export const maxVideoSizeBytes = Number(
+  process.env.R2_MAX_VIDEO_SIZE_BYTES || 100 * 1024 * 1024,
+);
+export const allowedImageMimeTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+export const allowedVideoMimeTypes = [
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+];
+export const allowedCourseMimeTypes = [
+  ...allowedImageMimeTypes,
+  ...allowedVideoMimeTypes,
+];

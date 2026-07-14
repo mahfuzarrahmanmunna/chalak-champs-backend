@@ -40,18 +40,29 @@ export const sendVerificationEmail = async (
   email: string,
 ): Promise<{ success: boolean; message?: string }> => {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.error(
-        "SMTP credentials not configured. Set EMAIL_USER and EMAIL_PASS in environment.",
-      );
-      return { success: false, message: "SMTP credentials not configured" };
-    }
-    // Generate a verification code
     const code = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Code expires in 10 minutes
 
     // Store the code with expiration
     verificationCodes[email] = { code, expiresAt };
+
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      const isDev = process.env.NODE_ENV !== "production";
+      if (isDev && process.env.DISABLE_DEV_EMAIL_FALLBACK !== "true") {
+        console.warn(
+          `[DEV] SMTP not configured. Email OTP for ${email}: ${code}`,
+        );
+        return {
+          success: true,
+          message: "Verification code sent (dev mode: check server console)",
+        };
+      }
+
+      console.error(
+        "SMTP credentials not configured. Set EMAIL_USER and EMAIL_PASS in environment.",
+      );
+      return { success: false, message: "SMTP credentials not configured" };
+    }
 
     // Create professional email HTML
     const emailHTML = `

@@ -33,7 +33,7 @@
     "hono": "^4.12.18",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.1.5",
+    "mongoose": "^9.7.4",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "nodemailer": "^8.0.2",
@@ -52,6 +52,6 @@
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "wrangler": "^4.53.1"
+    "wrangler": "^4.110.0"
   }
 }

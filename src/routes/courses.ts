@@ -8,6 +8,7 @@ import {
   updateCourse,
   deleteCourse,
   getInstructorCourses,
+  getCourseBySlug,
 } from "../controllers/CourseController";
 import {
   createModule,
@@ -30,16 +31,36 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
 });
 
+// ✅ FIX: Custom middleware to prevent "Unexpected field" error
+// This accepts text fields + files, then formats files as an object for the controller
+const uploadAny = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  upload.any()(req, res, (err: any) => {
+    if (err) return next(err);
+    
+    const filesArray = req.files as Express.Multer.File[];
+    if (filesArray && filesArray.length > 0) {
+      (req as any).files = filesArray.reduce((acc, file) => {
+        if (!acc[file.fieldname]) acc[file.fieldname] = [];
+        acc[file.fieldname].push(file);
+        return acc;
+      }, {} as { [fieldname: string]: Express.Multer.File[] });
+    }
+    
+    next();
+  });
+};
+
 const router = express.Router();
 
 // =============================================
 // PUBLIC ROUTES (No auth required)
 // =============================================
 router.get("/", getAllCourses);
+router.get("/slug/:slug", getCourseBySlug);
 router.get("/:id", getCourseById);
 
 // =============================================
-// PROTECTED ROUTES (Auth required below this line)
+// PROTECTED ROUTES (Auth required)
 // =============================================
 router.use(protect);
 
@@ -47,41 +68,28 @@ router.use(protect);
 router.get("/instructor/my-courses", getInstructorCourses);
 
 // --- Course CRUD ---
+// ✅ FIX: Using uploadAny instead of upload.fields()
 router.post(
   "/",
   authorize("instructor", "admin"),
-  upload.fields([
-    { name: "thumbnail", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
+  uploadAny,
   createCourse,
 );
 
 router.put(
   "/:id",
   authorize("instructor", "admin"),
-  upload.fields([
-    { name: "thumbnail", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
+  uploadAny,
   updateCourse,
 );
 
 router.delete("/:id", authorize("instructor", "admin"), deleteCourse);
 
 // =============================================
-// MODULE ROUTES (Nested under :courseId)
-// These paths MUST match what the frontend calls:
-//   GET    /api/courses/:courseId/modules
-//   POST   /api/courses/:courseId/modules
-//   PUT    /api/courses/:courseId/modules/:moduleId
-//   DELETE /api/courses/:courseId/modules/:moduleId
+// MODULE ROUTES
 // =============================================
-
-// Get all modules for a course (with lessons populated)
 router.get("/:courseId/modules", getCourseModules);
 
-// Create a new module in a course
 router.post(
   "/:courseId/modules",
   authorize("instructor", "admin"),
@@ -92,8 +100,6 @@ router.post(
   createModule,
 );
 
-// ✅ FIXED: Added :courseId prefix to match frontend
-// Update a specific module
 router.put(
   "/:courseId/modules/:moduleId",
   authorize("instructor", "admin"),
@@ -104,8 +110,6 @@ router.put(
   updateModule,
 );
 
-// ✅ FIXED: Added :courseId prefix to match frontend
-// Delete a specific module (and its lessons)
 router.delete(
   "/:courseId/modules/:moduleId",
   authorize("instructor", "admin"),
@@ -113,28 +117,14 @@ router.delete(
 );
 
 // =============================================
-// LESSON ROUTES (Nested under :courseId/modules/:moduleId)
+// LESSON ROUTES
 // =============================================
-
-// ✅ FIXED: Added :courseId prefix to match frontend
-// Create a lesson inside a specific module
-router.post(
-  "/:courseId/modules/:moduleId/lessons",
-  authorize("instructor", "admin"),
-  upload.fields([
-    { name: "thumbnail", maxCount: 1 },
-    { name: "video", maxCount: 1 },
-  ]),
-  createLesson,
-);
-
 router.get(
   "/:courseId/modules/available-exams",
   authorize("instructor", "admin"),
   getAvailableExams,
 );
 
-// Create a lesson inside a specific module (UPDATED)
 router.post(
   "/:courseId/modules/:moduleId/lessons",
   authorize("instructor", "admin"),
@@ -145,7 +135,6 @@ router.post(
   createLesson,
 );
 
-// ✅ NEW: Update a lesson
 router.put(
   "/:courseId/modules/:moduleId/lessons/:lessonId",
   authorize("instructor", "admin"),
@@ -156,14 +145,6 @@ router.put(
   updateLesson,
 );
 
-// Delete a specific lesson
-router.delete(
-  "/:courseId/modules/:moduleId/lessons/:lessonId",
-  authorize("instructor", "admin"),
-  deleteLesson,
-);
-
-// Delete a specific lesson
 router.delete(
   "/:courseId/modules/:moduleId/lessons/:lessonId",
   authorize("instructor", "admin"),
