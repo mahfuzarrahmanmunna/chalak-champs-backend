@@ -71,7 +71,7 @@ export const createLesson = catchAsync(
           type: "exam",
           order: nextOrder,
           duration: existingExam.duration,
-          examId: existingExam._id,
+          examId: existingExam._id as mongoose.Types.ObjectId, // ✅ FIX: Cast to ObjectId
           examConfig: {
             duration: existingExam.duration,
             passingMarks: existingExam.passingMarks,
@@ -116,7 +116,7 @@ export const createLesson = catchAsync(
                 explanation: qData.explanation,
               });
 
-              questionIds.push(question._id);
+              questionIds.push(question._id as mongoose.Types.ObjectId); // ✅ FIX: Cast to ObjectId
             }
           }
 
@@ -164,7 +164,7 @@ export const createLesson = catchAsync(
             type: "exam",
             order: nextOrder,
             duration: parsedDuration,
-            examId: newExam._id,
+            examId: newExam._id as mongoose.Types.ObjectId, // ✅ FIX: Cast to ObjectId
             examConfig: {
               duration: parsedDuration,
               passingMarks: parsedPassingMarks,
@@ -260,7 +260,7 @@ export const updateLesson = catchAsync(
           if (!existingExam) {
             return next(new AppError("Selected exam not found", 404));
           }
-          lesson.examId = existingExam._id;
+          lesson.examId = existingExam._id as mongoose.Types.ObjectId; // ✅ FIX: Cast to ObjectId
           lesson.examConfig = {
             duration: existingExam.duration,
             passingMarks: existingExam.passingMarks,
@@ -308,12 +308,6 @@ export const deleteLesson = catchAsync(
 
     const lesson = await Lesson.findById(lessonId);
     if (!lesson) return next(new AppError("Lesson not found", 404));
-
-    // Optional: Also delete the linked exam if needed
-    // Uncomment if you want cascade delete
-    // if (lesson.type === "exam" && lesson.examId) {
-    //   await Exam.findByIdAndDelete(lesson.examId);
-    // }
 
     await lesson.deleteOne();
 

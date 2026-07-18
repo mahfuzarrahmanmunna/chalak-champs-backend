@@ -51,12 +51,13 @@ const UserSchema = new mongoose_1.Schema({
     isActive: { type: Boolean, default: true },
     bio: { type: String, trim: true },
 }, { timestamps: true });
-UserSchema.index({ email: 1 });
+// UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.virtual("fullNameVirtual").get(function () {
     return `${this.firstName} ${this.lastName}`.trim();
 });
 UserSchema.set("toJSON", { virtuals: true });
 UserSchema.set("toObject", { virtuals: true });
-// REMOVED the AuthRequest interface from here
+// ONLY keep this one, delete the { role: 1 } index!
+UserSchema.index({ email: 1 });
 exports.default = mongoose_1.default.model("User", UserSchema);

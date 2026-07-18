@@ -87,7 +87,7 @@ exports.createLesson = (0, errorHandler_1.catchAsync)(async (req, res, next) => 
                 type: "exam",
                 order: nextOrder,
                 duration: existingExam.duration,
-                examId: existingExam._id,
+                examId: existingExam._id, // ✅ FIX: Cast to ObjectId
                 examConfig: {
                     duration: existingExam.duration,
                     passingMarks: existingExam.passingMarks,
@@ -127,7 +127,7 @@ exports.createLesson = (0, errorHandler_1.catchAsync)(async (req, res, next) => 
                             difficulty: qData.difficulty || "medium",
                             explanation: qData.explanation,
                         });
-                        questionIds.push(question._id);
+                        questionIds.push(question._id); // ✅ FIX: Cast to ObjectId
                     }
                 }
                 // Create exam
@@ -168,7 +168,7 @@ exports.createLesson = (0, errorHandler_1.catchAsync)(async (req, res, next) => 
                     type: "exam",
                     order: nextOrder,
                     duration: parsedDuration,
-                    examId: newExam._id,
+                    examId: newExam._id, // ✅ FIX: Cast to ObjectId
                     examConfig: {
                         duration: parsedDuration,
                         passingMarks: parsedPassingMarks,
@@ -253,7 +253,7 @@ exports.updateLesson = (0, errorHandler_1.catchAsync)(async (req, res, next) => 
                 if (!existingExam) {
                     return next(new errorHandler_1.AppError("Selected exam not found", 404));
                 }
-                lesson.examId = existingExam._id;
+                lesson.examId = existingExam._id; // ✅ FIX: Cast to ObjectId
                 lesson.examConfig = {
                     duration: existingExam.duration,
                     passingMarks: existingExam.passingMarks,
@@ -294,11 +294,6 @@ exports.deleteLesson = (0, errorHandler_1.catchAsync)(async (req, res, next) => 
     const lesson = await Lesson_1.default.findById(lessonId);
     if (!lesson)
         return next(new errorHandler_1.AppError("Lesson not found", 404));
-    // Optional: Also delete the linked exam if needed
-    // Uncomment if you want cascade delete
-    // if (lesson.type === "exam" && lesson.examId) {
-    //   await Exam.findByIdAndDelete(lesson.examId);
-    // }
     await lesson.deleteOne();
     res.status(200).json({
         success: true,

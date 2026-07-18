@@ -146,7 +146,7 @@ const sendEmails = async (data: any) => {
             </table>
 
              <div style="margin-top: 30px; text-align: center;">
-                <a href="http://localhost:5000/admin" style="display: inline-block; border: 1px solid #dddddd; padding: 10px 20px; text-decoration: none; border-radius: 6px; color: #555; font-size: 14px;">
+                <a href="https://apichalakchamps.vercel.app/admin" style="display: inline-block; border: 1px solid #dddddd; padding: 10px 20px; text-decoration: none; border-radius: 6px; color: #555; font-size: 14px;">
                   View in Admin Panel
                 </a>
             </div>

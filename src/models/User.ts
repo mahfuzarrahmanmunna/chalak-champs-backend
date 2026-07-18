@@ -5,6 +5,7 @@ export type UserRole = "student" | "teacher" | "instructor" | "admin";
 
 export interface IUser extends Document {
   uid: string;
+   _id: mongoose.Types.ObjectId;
   email: string;
   firstName: string;
   lastName: string;

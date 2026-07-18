@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface IQuestion extends Document {
   type: "mcq" | "fill-blank" | "short-answer" | "essay";
+   _id: mongoose.Types.ObjectId;
   text: string;
   options?: string[]; 
   correctAnswer: string | string[]; 

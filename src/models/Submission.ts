@@ -17,6 +17,10 @@ export interface ISubmission extends Document {
   student: mongoose.Types.ObjectId;
   answers: { questionId: mongoose.Types.ObjectId; answer: any }[];
 
+   _id: mongoose.Types.ObjectId; // ✅ ADD THIS LINE
+  
+  // ✅ Make sure reviewerId is explicitly typed
+
   // Grading Fields
   score: number; // The final score (can be auto-graded or teacher-graded)
   status: "in-progress" | "submitted" | "graded" | "flagged";

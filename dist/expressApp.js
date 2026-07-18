@@ -1,5 +1,5 @@
 "use strict";
-// src/express.App.ts
+// src/expressApp.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -25,26 +25,17 @@ const promoRoutes_1 = __importDefault(require("./routes/promoRoutes"));
 const heroRoutes_1 = __importDefault(require("./routes/heroRoutes"));
 const featureCoursesBannerRoutes_1 = __importDefault(require("./routes/featureCoursesBannerRoutes"));
 const videoGalleryRoute_1 = __importDefault(require("./routes/videoGalleryRoute"));
-/**
- * Builds the Express app (middleware + routes) without calling listen().
- * Mongo is ensured on each request — readyState checks are cheap once connected.
- */
 function createExpressApp() {
     const app = (0, express_1.default)();
-    app.use("/api", async (req, _res, next) => {
-        try {
-            await (0, mongo_1.ensureMongoConnected)();
-            next();
-        }
-        catch (e) {
-            next(e);
-        }
-    });
+    // ==========================================
+    // 1. GLOBAL MIDDLEWARE (MUST BE FIRST)
+    // ==========================================
     app.use((0, helmet_1.default)());
     const localOrigins = [
         "https://chalakchamps.com",
         "http://127.0.0.1:3000",
         "https://localhost:3000",
+        "http://localhost:3000",
         "https://127.0.0.1:3000",
     ];
     const allowedOrigins = [
@@ -55,6 +46,7 @@ function createExpressApp() {
     if (allowLocalhost) {
         allowedOrigins.push(...localOrigins);
     }
+    // Custom CORS Headers
     app.use((req, res, next) => {
         const origin = req.headers.origin;
         if (allowLocalhost || !origin) {
@@ -66,6 +58,7 @@ function createExpressApp() {
         res.setHeader("Access-Control-Allow-Credentials", "true");
         res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        // Handle Preflight immediately
         if (req.method === "OPTIONS") {
             return res.sendStatus(200);
         }
@@ -73,13 +66,7 @@ function createExpressApp() {
     });
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
-            if (!origin) {
-                return callback(null, true);
-            }
-            if (allowLocalhost) {
-                return callback(null, true);
-            }
-            if (allowedOrigins.includes(origin)) {
+            if (!origin || allowLocalhost || allowedOrigins.includes(origin)) {
                 return callback(null, true);
             }
             return callback(new Error(`CORS policy does not allow access from origin ${origin}`));
@@ -92,8 +79,25 @@ function createExpressApp() {
     app.use((0, morgan_1.default)("dev"));
     app.use(express_1.default.json({ limit: "10mb" }));
     app.use(express_1.default.urlencoded({ extended: true, limit: "10mb" }));
-    // Use cwd so this works after bundling for Cloudflare Workers (no __dirname in ESM bundles).
+    // ==========================================
+    // 2. STATIC FILES
+    // ==========================================
     app.use("/uploads", express_1.default.static(path_1.default.join(process.cwd(), "uploads")));
+    // ==========================================
+    // 3. DATABASE CONNECTION MIDDLEWARE (Only for /api routes)
+    // ==========================================
+    app.use("/api", async (req, _res, next) => {
+        try {
+            await (0, mongo_1.ensureMongoConnected)();
+            next();
+        }
+        catch (e) {
+            next(e);
+        }
+    });
+    // ==========================================
+    // 4. ROUTES
+    // ==========================================
     app.use("/api/auth", auth_1.default);
     app.use("/auth", auth_1.default);
     app.use("/api/courses", courses_1.default);
@@ -103,22 +107,39 @@ function createExpressApp() {
     app.use("/api/freebookingprops", freeBookingRoutes_1.default);
     app.use("/api/exam", examRoutes_1.default);
     app.use("/api/enrollments", enrollmentRoutes_1.default);
-    app.use("/api/cta", ctaRoutes_1.default); // <--- Use the route
+    app.use("/api/cta", ctaRoutes_1.default);
     app.use("/api/products", products_1.default);
     app.use("/api/orders", orderRoutes_1.default);
     app.use("/api/promo", promoRoutes_1.default);
     app.use("/api/hero", heroRoutes_1.default);
     app.use("/api/feature-courses-banner", featureCoursesBannerRoutes_1.default);
     app.use("/api/video-gallery", videoGalleryRoute_1.default);
+    // ==========================================
+    // 5. HEALTH & ROOT ROUTES
+    // ==========================================
     app.get("/health", (req, res) => {
         res.json({ status: "OK", timestamp: new Date() });
     });
+    app.get("/", (req, res) => {
+        res.json({
+            success: true,
+            message: "Chalak Champs API Running 🚀",
+        });
+    });
+    // ==========================================
+    // 6. ERROR HANDLING
+    // ==========================================
     app.use((req, res) => {
         res.status(404).json({ message: "Route not found" });
     });
     app.use((err, _req, res, _next) => {
         console.error("Server Error:", err);
         const message = err instanceof Error ? err.message : "Internal Server Error";
+        // Add CORS headers to errors so the frontend can read the error message!
+        const origin = _req.headers.origin;
+        if (allowLocalhost || !origin || allowedOrigins.includes(origin || "")) {
+            res.setHeader("Access-Control-Allow-Origin", origin || "*");
+        }
         res.status(500).json({ message });
     });
     return app;

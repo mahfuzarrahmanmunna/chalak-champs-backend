@@ -20,6 +20,8 @@ type MulterFiles = {
   }[];
 };
 
+
+
 type RequestWithFiles = Omit<AuthRequest, "files"> & { files?: MulterFiles };
 
 const parseJSON = (value: any) => {

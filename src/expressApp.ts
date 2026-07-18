@@ -1,4 +1,4 @@
-// src/express.App.ts
+// src/expressApp.ts
 
 import express from "express";
 import cors from "cors";
@@ -19,32 +19,21 @@ import orderRoutes from "./routes/orderRoutes";
 import promoRoutes from "./routes/promoRoutes";
 import heroRoutes from "./routes/heroRoutes";
 import featureCoursesBannerRoutes from "./routes/featureCoursesBannerRoutes";
-import videoGalleryRoutes from "./routes/videoGalleryRoute";   
+import videoGalleryRoutes from "./routes/videoGalleryRoute";
 
-
-
-/**
- * Builds the Express app (middleware + routes) without calling listen().
- * Mongo is ensured on each request — readyState checks are cheap once connected.
- */
 export function createExpressApp() {
   const app = express();
 
-  app.use("/api", async (req, _res, next) => {
-    try {
-      await ensureMongoConnected();
-      next();
-    } catch (e) {
-      next(e);
-    }
-  });
-
+  // ==========================================
+  // 1. GLOBAL MIDDLEWARE (MUST BE FIRST)
+  // ==========================================
   app.use(helmet());
 
   const localOrigins = [
     "https://chalakchamps.com",
     "http://127.0.0.1:3000",
     "https://localhost:3000",
+    "http://localhost:3000",
     "https://127.0.0.1:3000",
   ];
 
@@ -60,6 +49,7 @@ export function createExpressApp() {
     allowedOrigins.push(...localOrigins);
   }
 
+  // Custom CORS Headers
   app.use((req, res, next) => {
     const origin = req.headers.origin as string | undefined;
     if (allowLocalhost || !origin) {
@@ -68,14 +58,10 @@ export function createExpressApp() {
       res.setHeader("Access-Control-Allow-Origin", origin);
     }
     res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader(
-      "Access-Control-Allow-Methods",
-      "GET,POST,PUT,DELETE,OPTIONS",
-    );
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization",
-    );
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    
+    // Handle Preflight immediately
     if (req.method === "OPTIONS") {
       return res.sendStatus(200);
     }
@@ -85,18 +71,10 @@ export function createExpressApp() {
   app.use(
     cors({
       origin: (origin, callback) => {
-        if (!origin) {
+        if (!origin || allowLocalhost || allowedOrigins.includes(origin)) {
           return callback(null, true);
         }
-        if (allowLocalhost) {
-          return callback(null, true);
-        }
-        if (allowedOrigins.includes(origin)) {
-          return callback(null, true);
-        }
-        return callback(
-          new Error(`CORS policy does not allow access from origin ${origin}`),
-        );
+        return callback(new Error(`CORS policy does not allow access from origin ${origin}`));
       },
       credentials: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -104,13 +82,31 @@ export function createExpressApp() {
       optionsSuccessStatus: 200,
     }),
   );
+
   app.use(morgan("dev"));
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-  // Use cwd so this works after bundling for Cloudflare Workers (no __dirname in ESM bundles).
+  // ==========================================
+  // 2. STATIC FILES
+  // ==========================================
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+  // ==========================================
+  // 3. DATABASE CONNECTION MIDDLEWARE (Only for /api routes)
+  // ==========================================
+  app.use("/api", async (req, _res, next) => {
+    try {
+      await ensureMongoConnected();
+      next();
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ==========================================
+  // 4. ROUTES
+  // ==========================================
   app.use("/api/auth", authRoutes);
   app.use("/auth", authRoutes);
   app.use("/api/courses", courseRoutes);
@@ -120,34 +116,46 @@ export function createExpressApp() {
   app.use("/api/freebookingprops", freeBookingRoutes);
   app.use("/api/exam", examRoutes);
   app.use("/api/enrollments", enrollmentRoutes);
-  app.use("/api/cta", ctaRoutes); // <--- Use the route
+  app.use("/api/cta", ctaRoutes);
   app.use("/api/products", productRoutes);
-
   app.use("/api/orders", orderRoutes);
   app.use("/api/promo", promoRoutes);
   app.use("/api/hero", heroRoutes);
   app.use("/api/feature-courses-banner", featureCoursesBannerRoutes);
-  app.use("/api/video-gallery", videoGalleryRoutes);   
+  app.use("/api/video-gallery", videoGalleryRoutes);
 
-
+  // ==========================================
+  // 5. HEALTH & ROOT ROUTES
+  // ==========================================
   app.get("/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date() });
   });
 
+  app.get("/", (req, res) => {
+    res.json({
+      success: true,
+      message: "Chalak Champs API Running 🚀",
+    });
+  });
+
+  // ==========================================
+  // 6. ERROR HANDLING
+  // ==========================================
   app.use((req, res) => {
     res.status(404).json({ message: "Route not found" });
   });
 
   app.use(
-    (
-      err: unknown,
-      _req: express.Request,
-      res: express.Response,
-      _next: express.NextFunction,
-    ) => {
+    (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       console.error("Server Error:", err);
-      const message =
-        err instanceof Error ? err.message : "Internal Server Error";
+      const message = err instanceof Error ? err.message : "Internal Server Error";
+      
+      // Add CORS headers to errors so the frontend can read the error message!
+      const origin = _req.headers.origin as string | undefined;
+      if (allowLocalhost || !origin || allowedOrigins.includes(origin || "")) {
+        res.setHeader("Access-Control-Allow-Origin", origin || "*");
+      }
+      
       res.status(500).json({ message });
     },
   );
