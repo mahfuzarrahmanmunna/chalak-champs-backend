@@ -17,13 +17,14 @@ import {
   deleteModule,
   deleteLesson,
 } from "../controllers/moduleController";
-import { protect, authorize } from "../middleware/auth";
+import { protect, authorize, authenticate } from "../middleware/auth";
 import multer from "multer";
 import {
   getAvailableExams,
   updateLesson,
   createLesson,
 } from "../controllers/lessonController";
+// import { uploadToR2 } from "../middleware/upload"; // ✅ Removed unused import
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -32,7 +33,6 @@ const upload = multer({
 });
 
 // ✅ FIX: Custom middleware to prevent "Unexpected field" error
-// This accepts text fields + files, then formats files as an object for the controller
 const uploadAny = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   upload.any()(req, res, (err: any) => {
     if (err) return next(err);
@@ -68,7 +68,6 @@ router.use(protect);
 router.get("/instructor/my-courses", getInstructorCourses);
 
 // --- Course CRUD ---
-// ✅ FIX: Using uploadAny instead of upload.fields()
 router.post(
   "/",
   authorize("instructor", "admin"),
@@ -76,6 +75,7 @@ router.post(
   createCourse,
 );
 
+// ✅ FIX: Kept ONLY THIS ONE update route. The duplicate at the bottom has been deleted.
 router.put(
   "/:id",
   authorize("instructor", "admin"),

@@ -1,5 +1,19 @@
 import mongoose, { Document, Schema } from "mongoose";
 
+// --- HELPERS ---
+// Automatically fixes primitive strings into { en, bn } objects
+const sanitizeBilingual = (val: any): { en: string; bn: string } => {
+  if (!val) return { en: "", bn: "" };
+  if (typeof val === "string") return { en: val, bn: val }; // Fixes corrupt DB strings!
+  if (typeof val === "object" && val !== null) {
+    return {
+      en: typeof val.en === "string" ? val.en : String(val.en || ""),
+      bn: typeof val.bn === "string" ? val.bn : String(val.bn || ""),
+    };
+  }
+  return { en: "", bn: "" };
+};
+
 // --- Reusable Bilingual Schema ---
 const BilingualSchema = new Schema(
   {
@@ -137,7 +151,7 @@ export interface ICourse extends Document {
   description: IBilingualText;
   instructor: mongoose.Types.ObjectId;
   instructorName?: string;
-  duration?: IBilingualText; // Changed from string to IBilingualText
+  duration?: IBilingualText;
   price: number;
   originalPrice?: number;
   thumbnail?: string;
@@ -177,7 +191,7 @@ const CourseSchema: Schema = new Schema(
 
     instructor: { type: Schema.Types.ObjectId, ref: "User", required: true },
     instructorName: { type: String },
-    duration: { type: BilingualSchema, default: { en: "", bn: "" } }, // Changed to BilingualSchema
+    duration: { type: BilingualSchema, default: { en: "", bn: "" } },
     price: { type: Number, required: true },
     originalPrice: { type: Number },
     thumbnail: { type: String },
@@ -196,7 +210,6 @@ const CourseSchema: Schema = new Schema(
     level: { type: String },
 
     // ✅ ADDED THIS: Schema definition for content
-    // Using Mixed type because the structure is very deep and complex
     content: { type: Schema.Types.Mixed, default: {} },
 
     isPublished: { type: Boolean, default: false },
@@ -205,8 +218,16 @@ const CourseSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-// Generate slug from title before saving
-CourseSchema.pre("save", { document: true, query: false }, function (next: Function) {
+// ✅ FIXED: Pre-save hook with built-in sanitization
+CourseSchema.pre("save", { document: true, query: false }, async function () {
+  // 1. SANITIZE BILINGUAL FIELDS (Fixes the "Tried to set nested object to primitive" error)
+  // This converts bad strings like "Non pariatur Dolore" into { en: "Non...", bn: "Non..." } 
+  this.title = sanitizeBilingual(this.title);
+  this.heroSubtitle = sanitizeBilingual(this.heroSubtitle);
+  this.description = sanitizeBilingual(this.description);
+  this.duration = sanitizeBilingual(this.duration);
+
+  // 2. SLUG GENERATION
   if (this.isModified("title") && !this.slug) {
     const titleEn = (this.title as any).en || "";
     this.slug = titleEn
@@ -214,10 +235,11 @@ CourseSchema.pre("save", { document: true, query: false }, function (next: Funct
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
   }
+
+  // 3. PUBLISH DATE
   if (this.isPublished && !this.publishedAt) {
     this.publishedAt = new Date();
   }
-  next();
 });
 
 export default mongoose.model<ICourse>("Course", CourseSchema);

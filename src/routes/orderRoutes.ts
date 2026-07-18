@@ -11,7 +11,7 @@ router.post("/create", orderController.createOrder);
 router.post("/verify", orderController.verifyOrder);
 
 // SSLCommerz IPN (called by SSLCommerz server-to-server)
-router.post("/ipn", orderController.handleIPN);
+// router.post("/ipn", orderController.handleIPN);
 
 // Get single order by orderId or tranId
 router.get("/:id", orderController.getOrder);

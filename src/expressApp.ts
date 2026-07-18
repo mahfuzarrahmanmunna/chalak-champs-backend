@@ -19,7 +19,7 @@ import orderRoutes from "./routes/orderRoutes";
 import promoRoutes from "./routes/promoRoutes";
 import heroRoutes from "./routes/heroRoutes";
 import featureCoursesBannerRoutes from "./routes/featureCoursesBannerRoutes";
-
+import videoGalleryRoutes from "./routes/videoGalleryRoute";   
 
 
 
@@ -127,6 +127,8 @@ export function createExpressApp() {
   app.use("/api/promo", promoRoutes);
   app.use("/api/hero", heroRoutes);
   app.use("/api/feature-courses-banner", featureCoursesBannerRoutes);
+  app.use("/api/video-gallery", videoGalleryRoutes);   
+
 
   app.get("/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date() });
