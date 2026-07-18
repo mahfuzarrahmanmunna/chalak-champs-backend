@@ -1,10 +1,11 @@
 // src/middleware/auth.ts
 import type { Request, Response, NextFunction } from "express";
 import { auth } from "../config/firebase";
-import User, { IUser } from "../models/User";
+import User, { IUser } from "../models/User"; // Import IUser here!
 
+// Define AuthRequest here, using IUser so it automatically gets "instructor"
 export interface AuthRequest extends Request {
-  user?: IUser; // Expects IUser or undefined
+  user?: IUser; 
 }
 
 export const authenticate = async (
@@ -26,8 +27,6 @@ export const authenticate = async (
       const decodedToken = await auth.verifyIdToken(idToken);
       const uid = decodedToken.uid;
 
-      // FIX 1: Use .lean() to return a plain JavaScript object instead of a Mongoose Document
-      // This fixes the "Type Document is not assignable to IUser" error
       let user = await User.findOne({ uid }).lean<IUser>();
 
       const isRegisterRoute = req.originalUrl.includes("/register");
@@ -38,10 +37,8 @@ export const authenticate = async (
         const fullName = decodedToken.name || "User";
         const nameParts = fullName.split(" ");
         const firstName = nameParts[0] || "User";
-        const lastName =
-          nameParts.length > 1 ? nameParts.slice(1).join(" ") : "User";
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "User";
 
-        // Use .toObject() on the result if creating, or just assign since we are creating fresh
         const createdUser = await User.create({
           uid: uid,
           email: decodedToken.email || "",
@@ -51,11 +48,9 @@ export const authenticate = async (
           role: "student",
         });
 
-        user = createdUser.toObject() as IUser; // Convert to plain object
+        user = createdUser.toObject() as IUser; 
       }
 
-      // FIX 2: Convert null to undefined.
-      // Mongoose returns null if not found, but the interface expects undefined.
       req.user = user || undefined;
 
       next();
@@ -80,9 +75,7 @@ export const authorize =
       return;
     }
     if (!roles.includes(req.user.role)) {
-      res
-        .status(403)
-        .json({ message: `Forbidden: Role '${req.user.role}' is not allowed` });
+      res.status(403).json({ message: `Forbidden: Role '${req.user.role}' is not allowed` });
       return;
     }
     next();

@@ -72,7 +72,8 @@ export const getActiveBanner = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const lang = (req.query.lang as string) || "en";
+    // FIX: Explicitly cast to "en" | "bn" to satisfy Mongoose strict types
+    const lang = ((req.query.lang as string) || "en") as "en" | "bn";
 
     if (!["en", "bn"].includes(lang)) {
       fail(res, "Invalid language. Use 'en' or 'bn'.", undefined, 400);
@@ -160,7 +161,8 @@ export const createBanner = async (
       return;
     }
 
-    const lang = req.body.lang as string;
+    // FIX: Explicitly cast to "en" | "bn"
+    const lang = req.body.lang as "en" | "bn";
     const link = req.body.link as string;
     const altText = req.body.altText as string | undefined;
     const active = req.body.active as string | undefined;
@@ -242,7 +244,8 @@ export const updateBanner = async (
         fail(res, "Language must be 'en' or 'bn'.");
         return;
       }
-      update.lang = req.body.lang;
+      // FIX: Explicitly cast to "en" | "bn"
+      update.lang = req.body.lang as "en" | "bn";
     }
 
     // Handle Image Replacement
@@ -273,7 +276,8 @@ export const updateBanner = async (
 
     // If activating, deactivate others of the same language
     if (update.active === true) {
-      const targetLang = update.lang || existing.lang;
+      // FIX: Ensure targetLang is typed as "en" | "bn"
+      const targetLang = (update.lang || existing.lang) as "en" | "bn";
       await FeatureCoursesBannerModel.updateMany(
         { lang: targetLang, active: true, _id: { $ne: id } },
         { active: false },

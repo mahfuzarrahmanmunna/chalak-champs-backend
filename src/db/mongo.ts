@@ -4,11 +4,11 @@ let mongoConnectionPromise: Promise<void> | null = null;
 let mongoConnectFailed = false;
 let lastFailureTime = 0;
 
-const RETRY_COOLDOWN_MS = 30_000; // 30 seconds before retry
+const RETRY_COOLDOWN_MS = 30_000; 
 const CONNECTION_OPTIONS = {
-  serverSelectionTimeoutMS: 5000,  // 5 sec to find a server
-  socketTimeoutMS: 45000,          // 45 sec socket timeout
-  maxPoolSize: 10,                 // Connection pool size
+  serverSelectionTimeoutMS: 5000, 
+  socketTimeoutMS: 45000,         
+  maxPoolSize: 10,                
   retryWrites: true,
   w: "majority" as const,
 };

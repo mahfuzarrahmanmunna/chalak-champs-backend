@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import VideoGallery from "../models/VideoGallery";
+import VideoGallery, { IVideoItem } from "../models/VideoGallery"; // Import IVideoItem
 
 export const getVideoGallery = async (req: Request, res: Response) => {
   try {
@@ -14,10 +14,10 @@ export const getVideoGallery = async (req: Request, res: Response) => {
       });
     }
 
-    // Filter out inactive videos and sort them
+    // FIX: Add explicit types to the callback parameters
     const activeVideos = gallery.videos
-      .filter((v) => v.isActive)
-      .sort((a, b) => a.order - b.order);
+      .filter((v: IVideoItem) => v.isActive)
+      .sort((a: IVideoItem, b: IVideoItem) => a.order - b.order);
 
     res.status(200).json({
       success: true,

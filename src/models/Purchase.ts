@@ -19,24 +19,20 @@ export interface IPurchase extends Document {
   originalTotalAmount?: number;
   discountAmount?: number;
   
-  // Status
   status: PurchaseStatus;
   paymentStatus: PaymentStatus;
   paymentInfo?: IPaymentInfo;
   
-  // Metadata
   notes?: string;
   ipAddress?: string;
   userAgent?: string;
   
-  // References
   course: mongoose.Types.ObjectId;
   courseTitle: string;
   courseSlug: string;
   instructor?: mongoose.Types.ObjectId;
   instructorName?: string;
   
-  // Status History
   statusHistory: Array<{
     status: PurchaseStatus;
     note?: string;
@@ -44,7 +40,6 @@ export interface IPurchase extends Document {
     changedAt: Date;
   }>;
   
-  // Timestamps
   confirmedAt?: Date;
   completedAt?: Date;
   cancelledAt?: Date;
@@ -62,7 +57,6 @@ const PurchaseSchema = new Schema<IPurchase>(
       default: generatePurchaseId,
     },
     
-    // Student Info
     studentName: {
       type: String,
       required: [true, "Student name is required"],
@@ -93,7 +87,6 @@ const PurchaseSchema = new Schema<IPurchase>(
       },
     },
     
-    // Purchase Items (for future multi-course support)
     items: [
       {
         courseId: { type: Schema.Types.ObjectId, ref: "Course", required: true },
@@ -104,7 +97,6 @@ const PurchaseSchema = new Schema<IPurchase>(
       },
     ],
     
-    // Amounts
     totalAmount: {
       type: Number,
       required: [true, "Total amount is required"],
@@ -113,7 +105,6 @@ const PurchaseSchema = new Schema<IPurchase>(
     originalTotalAmount: { type: Number, min: 0 },
     discountAmount: { type: Number, min: 0 },
     
-    // Status
     status: {
       type: String,
       enum: ["pending", "confirmed", "processing", "completed", "cancelled", "refunded"],
@@ -137,12 +128,10 @@ const PurchaseSchema = new Schema<IPurchase>(
       notes: { type: String },
     },
     
-    // Metadata
     notes: { type: String, trim: true },
     ipAddress: { type: String },
     userAgent: { type: String },
     
-    // Course Reference (denormalized for quick queries)
     course: {
       type: Schema.Types.ObjectId,
       ref: "Course",
@@ -152,11 +141,9 @@ const PurchaseSchema = new Schema<IPurchase>(
     courseTitle: { type: String, required: true },
     courseSlug: { type: String, required: true },
     
-    // Instructor Reference
     instructor: { type: Schema.Types.ObjectId, ref: "User", index: true },
     instructorName: { type: String },
     
-    // Status History
     statusHistory: [
       {
         status: { type: String, required: true },
@@ -166,7 +153,6 @@ const PurchaseSchema = new Schema<IPurchase>(
       },
     ],
     
-    // Status Timestamps
     confirmedAt: { type: Date },
     completedAt: { type: Date },
     cancelledAt: { type: Date },
@@ -183,8 +169,8 @@ PurchaseSchema.index({ status: 1, createdAt: -1 });
 PurchaseSchema.index({ paymentStatus: 1, createdAt: -1 });
 PurchaseSchema.index({ createdAt: -1 });
 
-// --- Pre-save Hook ---
-PurchaseSchema.pre("save", function (next) {
+// --- Pre-save Hook (Mongoose 7+ compatible - no next() callback needed) ---
+PurchaseSchema.pre("save", function () {
   // Calculate discount if not provided
   if (this.originalTotalAmount && !this.discountAmount) {
     this.discountAmount = this.originalTotalAmount - this.totalAmount;
@@ -226,25 +212,19 @@ PurchaseSchema.pre("save", function (next) {
   if (this.isModified("paymentInfo") && this.paymentInfo?.paidAt) {
     this.paymentStatus = "paid";
   }
-  
-  next();
 });
 
 // --- Static Methods ---
-
-// Get purchase by purchaseId
 PurchaseSchema.statics.findByPurchaseId = async function (purchaseId: string) {
   return this.findOne({ purchaseId });
 };
 
-// Get purchases by phone
 PurchaseSchema.statics.findByPhone = async function (phone: string, limit: number = 10) {
   return this.find({ studentPhone: phone })
     .sort({ createdAt: -1 })
     .limit(limit);
 };
 
-// Get purchase stats for an instructor
 PurchaseSchema.statics.getInstructorStats = async function (instructorId: string) {
   const stats = await this.aggregate([
     { $match: { instructor: new mongoose.Types.ObjectId(instructorId) } },
@@ -271,7 +251,6 @@ PurchaseSchema.statics.getInstructorStats = async function (instructorId: string
   };
 };
 
-// Get purchase stats (admin)
 PurchaseSchema.statics.getAdminStats = async function () {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -318,7 +297,6 @@ PurchaseSchema.statics.getAdminStats = async function () {
   };
 };
 
-// Check for duplicate purchases (same phone, same course, within last 24 hours)
 PurchaseSchema.statics.findDuplicate = async function (phone: string, courseId: string) {
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   return this.findOne({
@@ -334,7 +312,6 @@ PurchaseSchema.virtual("formattedAmount").get(function () {
   return `৳${this.totalAmount.toLocaleString("en-BD")}`;
 });
 
-// Ensure virtuals are included in JSON output
 PurchaseSchema.set("toJSON", { virtuals: true });
 PurchaseSchema.set("toObject", { virtuals: true });
 

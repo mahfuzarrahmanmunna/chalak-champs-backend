@@ -1,16 +1,24 @@
 import { Request, Response } from "express";
-import { AuthRequest } from "../middleware/auth";
+// import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
 import Purchase from "../models/Purchase";
 import Course from "../models/Course";
 import { PurchaseStatus, PaymentStatus, IPurchaseFilters } from "../types/purchase.types";
+import { AuthRequest } from "../middleware/authForRegistration";
 
 // --- HELPERS ---
+
+// Helper to safely get string from params
+const getStringParam = (param: string | string[] | undefined): string => {
+  if (Array.isArray(param)) {
+    return param[0];
+  }
+  return param || "";
+};
 
 const parseAmount = (value: any): number => {
   if (typeof value === "number") return value;
   if (typeof value === "string") {
-    // Remove currency symbols and spaces
     const cleaned = value.replace(/[৳$\s,]/g, "");
     const parsed = parseFloat(cleaned);
     return isNaN(parsed) ? 0 : parsed;
@@ -77,6 +85,20 @@ const applyFilters = (filters: IPurchaseFilters): any => {
   return match;
 };
 
+// Helper to check if string is MongoDB ObjectId
+const isObjectId = (str: string): boolean => {
+  return /^[0-9a-fA-F]{24}$/.test(str);
+};
+
+// Helper to find purchase by ID or purchaseId
+const findPurchaseById = async (id: string) => {
+  if (isObjectId(id)) {
+    return await Purchase.findById(id);
+  } else {
+    return await Purchase.findByPurchaseId(id);
+  }
+};
+
 // --- CONTROLLERS ---
 
 // 1. CREATE PURCHASE (Public - for student enrollment)
@@ -130,14 +152,14 @@ export const createPurchase = catchAsync(
       studentPhone: phone.trim(),
       studentEmail: email?.trim() || undefined,
       course: course._id,
-      courseTitle: courseTitle || course.title.en || course.title.bn || "Course",
+      courseTitle: courseTitle || (course.title as any)?.en || (course.title as any)?.bn || "Course",
       courseSlug: course.slug,
       instructor: course.instructor,
       instructorName: course.instructorName,
       items: [
         {
           courseId: course._id,
-          courseTitle: courseTitle || course.title.en || "Course",
+          courseTitle: courseTitle || (course.title as any)?.en || "Course",
           courseSlug: course.slug,
           amount: parsedAmount,
           originalAmount: course.originalPrice || undefined,
@@ -174,7 +196,7 @@ export const getAllPurchases = catchAsync(
     const match = applyFilters(filters);
     
     // Instructor can only see their own purchases
-    if (req.user?.role === "instructor") {
+    if (req.user?.role  === "instructor") {
       match.instructor = req.user._id;
     }
     
@@ -212,16 +234,9 @@ export const getAllPurchases = catchAsync(
 // 3. GET PURCHASE BY ID (Admin/Instructor/Student)
 export const getPurchaseById = catchAsync(
   async (req: AuthRequest, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     
-    let purchase;
-    
-    // Try to find by MongoDB _id or purchaseId
-    if (id.match(/^[0-9a-fA-F]{24}$/)) {
-      purchase = await Purchase.findById(id);
-    } else {
-      purchase = await Purchase.findByPurchaseId(id);
-    }
+    const purchase = await findPurchaseById(id);
     
     if (!purchase) {
       throw new AppError("Purchase not found", 404);
@@ -244,7 +259,7 @@ export const getPurchaseById = catchAsync(
 // 4. GET PURCHASES BY PHONE (Public - for students to check their purchases)
 export const getPurchasesByPhone = catchAsync(
   async (req: Request, res: Response) => {
-    const { phone } = req.params;
+    const phone = getStringParam(req.params.phone);
     
     if (!/^01[3-9]\d{8}$/.test(phone)) {
       throw new AppError(
@@ -317,15 +332,10 @@ export const getPurchasesByCourse = catchAsync(
 // 6. UPDATE PURCHASE STATUS (Admin/Instructor)
 export const updatePurchaseStatus = catchAsync(
   async (req: AuthRequest, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const { status, paymentStatus, paymentInfo, note } = req.body;
     
-    let purchase;
-    if (id.match(/^[0-9a-fA-F]{24}$/)) {
-      purchase = await Purchase.findById(id);
-    } else {
-      purchase = await Purchase.findByPurchaseId(id);
-    }
+    const purchase = await findPurchaseById(id);
     
     if (!purchase) {
       throw new AppError("Purchase not found", 404);
@@ -389,19 +399,14 @@ export const updatePurchaseStatus = catchAsync(
 // 7. CANCEL PURCHASE (Student - with phone verification)
 export const cancelPurchase = catchAsync(
   async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = getStringParam(req.params.id);
     const { phone, reason } = req.body;
     
     if (!phone) {
       throw new AppError("Phone number is required for verification", 400);
     }
     
-    let purchase;
-    if (id.match(/^[0-9a-fA-F]{24}$/)) {
-      purchase = await Purchase.findById(id);
-    } else {
-      purchase = await Purchase.findByPurchaseId(id);
-    }
+    const purchase = await findPurchaseById(id);
     
     if (!purchase) {
       throw new AppError("Purchase not found", 404);
@@ -496,7 +501,7 @@ export const exportPurchases = catchAsync(
     const purchases = await Purchase.find(match)
       .sort({ createdAt: -1 })
       .select("-statusHistory -userAgent -ipAddress -__v")
-      .limit(1000); // Limit to 1000 for safety
+      .limit(1000);
     
     // Transform for CSV
     const csvData = purchases.map((purchase) => ({
