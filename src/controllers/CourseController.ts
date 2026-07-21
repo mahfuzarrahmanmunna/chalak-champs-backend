@@ -1,4 +1,3 @@
-// src/controllers/courseController.ts
 import { Request, Response } from "express";
 import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
@@ -33,6 +32,42 @@ const parseJSON = (value: any): any => {
   }
 };
 
+// ====================================================================
+// ✅ FIX: Deep Merge Utility
+// This prevents nested object properties (like instructor.title, payment.description)
+// from being wiped out when the parent object is spread during an update.
+// ====================================================================
+function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
+  const output = { ...target };
+  
+  for (const key of Object.keys(source) as (keyof T)[]) {
+    const sourceVal = source[key];
+    const targetVal = output[key];
+    
+    if (
+      sourceVal !== null &&
+      sourceVal !== undefined &&
+      typeof sourceVal === "object" &&
+      !Array.isArray(sourceVal) &&
+      targetVal !== null &&
+      targetVal !== undefined &&
+      typeof targetVal === "object" &&
+      !Array.isArray(targetVal)
+    ) {
+      // Both are objects - recursively merge them
+      output[key] = deepMerge(
+        targetVal as Record<string, any>, 
+        sourceVal as Record<string, any>
+      ) as T[keyof T];
+    } else if (sourceVal !== undefined) {
+      // Primitive or array - replace entirely (but don't overwrite with undefined)
+      output[key] = sourceVal as T[keyof T];
+    }
+  }
+  
+  return output;
+}
+
 const uploadToR2 = async (
   file: Express.Multer.File,
   folder: string,
@@ -65,49 +100,81 @@ export const createCourse = catchAsync(
     const { user } = req;
     const files = req.files as MulterFiles | undefined;
 
+    console.log("=== COURSE CREATION START ===");
+    console.log("Files received:", files ? Object.keys(files) : "NONE");
+    console.log("Media files count:", files?.mediaFiles?.length || 0);
+
     const uploadedKeys: string[] = [];
 
     try {
       // 1. Upload Thumbnail to R2
       let thumbnailUrl = "";
       if (files?.thumbnail?.[0]) {
+        console.log("Uploading thumbnail:", files.thumbnail[0].originalname);
         const result = await uploadToR2(files.thumbnail[0], "courses/thumbnails");
         thumbnailUrl = result.url;
         uploadedKeys.push(result.key);
+        console.log("Thumbnail uploaded:", thumbnailUrl);
       }
 
       // 2. Upload Video to R2 (if provided)
       let videoUrl = "";
       if (files?.video?.[0]) {
+        console.log("Uploading video:", files.video[0].originalname);
         const result = await uploadToR2(files.video[0], "courses/videos");
         videoUrl = result.url;
         uploadedKeys.push(result.key);
+        console.log("Video uploaded:", videoUrl);
       }
 
       // 3. Upload Instructor Image to R2 (if provided)
       let instructorImageUrl = "";
       if (files?.instructorImage?.[0]) {
+        console.log("Uploading instructor image:", files.instructorImage[0].originalname);
         const result = await uploadToR2(files.instructorImage[0], "courses/instructors");
         instructorImageUrl = result.url;
         uploadedKeys.push(result.key);
+        console.log("Instructor image uploaded:", instructorImageUrl);
       }
 
-      // 4. Upload Media Files to R2 (if provided)
-      const mediaFileUrls: string[] = [];
+      // 4. Upload Media Files to R2
+      const mediaFileUrls: { url: string; type: "image" | "video"; originalName: string }[] = [];
+      
       if (files?.mediaFiles?.length) {
-        for (const file of files.mediaFiles) {
-          const result = await uploadToR2(file, "courses/media");
-          mediaFileUrls.push(result.url);
-          uploadedKeys.push(result.key);
+        console.log(`\n=== UPLOADING ${files.mediaFiles.length} MEDIA FILES ===`);
+        
+        for (let i = 0; i < files.mediaFiles.length; i++) {
+          const file = files.mediaFiles[i];
+          console.log(`[${i + 1}/${files.mediaFiles.length}] Uploading: ${file.originalname} (${file.mimetype}, ${Math.round(file.size / 1024)}KB)`);
+          
+          try {
+            const result = await uploadToR2(file, "courses/media");
+            const mediaType: "image" | "video" = file.mimetype.startsWith("video") ? "video" : "image";
+            
+            mediaFileUrls.push({
+              url: result.url,
+              type: mediaType,
+              originalName: file.originalname,
+            });
+            uploadedKeys.push(result.key);
+            
+            console.log(`[${i + 1}/${files.mediaFiles.length}] ✓ Uploaded: ${result.url} (type: ${mediaType})`);
+          } catch (uploadError) {
+            console.error(`[${i + 1}/${files.mediaFiles.length}] ✗ Failed:`, uploadError);
+            throw uploadError;
+          }
         }
+        console.log(`=== ALL ${mediaFileUrls.length} MEDIA FILES UPLOADED ===\n`);
+      } else {
+        console.log("No media files to upload");
       }
 
       // 5. Parse JSON Data from FormData
       let incoming = { ...req.body } as any;
-
       let contentData = parseJSON(incoming.content) || {};
 
-      if (!contentData.hero) {
+      // ✅ FIX: Only use fallback if the frontend sent an empty content object (legacy support)
+      if (Object.keys(contentData).length === 0) {
         contentData = {
           hero: {
             title: parseJSON(incoming.title) || { en: "", bn: "" },
@@ -125,7 +192,6 @@ export const createCourse = catchAsync(
               bn: incoming.contentBn || "",
             },
           },
-          ...contentData,
         };
       }
 
@@ -134,31 +200,43 @@ export const createCourse = catchAsync(
         contentData.instructor.image = instructorImageUrl;
       }
 
+      // Map uploaded URLs to media assets
       if (mediaFileUrls.length > 0) {
-        if (!contentData.mediaAssets) contentData.mediaAssets = [];
+        console.log("\n=== MAPPING UPLOADED URLS TO MEDIA ASSETS ===");
+        
+        if (!contentData.mediaAssets) {
+          contentData.mediaAssets = [];
+        }
 
         let urlIndex = 0;
-        contentData.mediaAssets = contentData.mediaAssets.map(
-          (asset: any, i: number) => {
-            if (asset.isNew && mediaFileUrls[urlIndex]) {
-              const url = mediaFileUrls[urlIndex++];
-              return {
-                type: asset.type || (url.match(/\.(mp4|webm|mov)/i) ? "video" : "image"),
-                src: url,
-                poster: asset.poster || "",
-              };
-            }
-            return asset;
-          },
-        );
+        
+        contentData.mediaAssets = contentData.mediaAssets.map((asset: any, i: number) => {
+          const isNewUpload = asset.isNew === true || 
+                              (asset.src && asset.src.startsWith('blob:'));
+          
+          if (isNewUpload && urlIndex < mediaFileUrls.length) {
+            const uploaded = mediaFileUrls[urlIndex++];
+            console.log(`Asset #${i}: Replaced blob URL -> ${uploaded.url} (type: ${uploaded.type})`);
+            return {
+              type: uploaded.type,
+              src: uploaded.url,
+              poster: asset.poster || "",
+            };
+          }
+          return asset;
+        });
 
         while (urlIndex < mediaFileUrls.length) {
-          const url = mediaFileUrls[urlIndex++];
+          const uploaded = mediaFileUrls[urlIndex++];
+          console.log(`Added new asset: ${uploaded.url} (type: ${uploaded.type})`);
           contentData.mediaAssets.push({
-            type: url.match(/\.(mp4|webm|mov)/i) ? "video" : "image",
-            src: url,
+            type: uploaded.type,
+            src: uploaded.url,
           });
         }
+        
+        console.log(`Final mediaAssets count: ${contentData.mediaAssets.length}`);
+        console.log("=== MAPPING COMPLETE ===\n");
       }
 
       // 6. Parse Prices
@@ -212,7 +290,11 @@ export const createCourse = catchAsync(
         publishedAt: new Date(),
       };
 
+      console.log("Saving course to database...");
       const course = await Course.create(courseData);
+      console.log("=== COURSE CREATED SUCCESSFULLY ===");
+      console.log("Course ID:", course._id);
+      console.log("Media assets saved:", course.content?.mediaAssets?.length || 0);
 
       res.status(201).json({
         success: true,
@@ -220,12 +302,20 @@ export const createCourse = catchAsync(
         message: "Course created successfully",
       });
     } catch (error: any) {
-      // Cleanup: Delete all uploaded R2 files if DB save fails
+      console.error("\n=== ERROR IN COURSE CREATION ===");
+      console.error("Error:", error.message);
+      console.error("Cleaning up", uploadedKeys.length, "uploaded files...");
+      
       for (const key of uploadedKeys) {
-        await deleteFromR2(`${r2PublicUrl}/${key}`).catch(console.error);
+        try {
+          await R2Service.deleteFile(key);
+          console.log("Deleted:", key);
+        } catch (deleteErr) {
+          console.error("Failed to delete:", key, deleteErr);
+        }
       }
       
-      console.error("Error creating course:", error);
+      console.error("=== CLEANUP COMPLETE ===\n");
 
       if (error.code === 11000) {
         const field = Object.keys(error.keyValue)[0];
@@ -251,7 +341,8 @@ export const createCourse = catchAsync(
   },
 );
 
-// 2. GET ALL COURSES (Public)
+
+// 2. GET ALL COURSES (Public) - FIXED TO RETURN ALL DATA
 export const getAllCourses = catchAsync(
   async (req: Request, res: Response) => {
     const { category, search, published, limit, page } = req.query;
@@ -277,10 +368,8 @@ export const getAllCourses = catchAsync(
       ];
     }
 
+    // FIXED: Removed .select() so it returns ALL data including content, mediaAssets, hero, etc.
     const courses = await Course.find(filter)
-      .select(
-        "slug title category price originalPrice thumbnail isPublished instructorName createdAt",
-      )
       .sort("-createdAt")
       .limit(Number(limit) || 50)
       .skip(((Number(page) || 1) - 1) * (Number(limit) || 50));
@@ -346,9 +435,6 @@ export const getCourseBySlug = catchAsync(
 export const getInstructorCourses = catchAsync(
   async (req: AuthRequest, res: Response) => {
     const courses = await Course.find({ instructor: req.user?._id })
-      .select(
-        "slug title category price originalPrice thumbnail isPublished createdAt",
-      )
       .sort("-createdAt");
 
     res.status(200).json({
@@ -365,8 +451,7 @@ export const updateCourse = catchAsync(
     const { id } = req.params;
     const files = req.files as MulterFiles | undefined;
 
-    // 🚨 NUCLEAR FIX: Bypass Mongoose validation to directly repair corrupt strings in the DB
-    // .lean() returns a plain Javascript object, so it won't trigger Mongoose errors
+    // Fix primitive string fields (existing code)
     const rawCourse = await Course.findById(id).lean();
     if (rawCourse) {
       const fixes: any = {};
@@ -375,20 +460,17 @@ export const updateCourse = catchAsync(
       if (typeof rawCourse.heroSubtitle === 'string') fixes.heroSubtitle = { en: rawCourse.heroSubtitle, bn: rawCourse.heroSubtitle };
       if (typeof rawCourse.description === 'string') fixes.description = { en: rawCourse.description, bn: rawCourse.description };
       
-      // .updateOne() talks directly to MongoDB, ignoring Mongoose schema rules completely
       if (Object.keys(fixes).length > 0) {
         await Course.updateOne({ _id: id }, { $set: fixes });
       }
     }
 
-    // Now it is safe to let Mongoose load the document
     const course = await Course.findById(id);
 
     if (!course) {
       return res.status(404).json({ success: false, message: "Course not found" });
     }
 
-    // Authorization
     if (
       course.instructor?.toString() !== req.user?._id?.toString() &&
       req.user?.role !== "admin"
@@ -399,11 +481,8 @@ export const updateCourse = catchAsync(
     const uploadedKeys: string[] = [];
     const oldUrlsToDelete: string[] = [];
 
-    if (!course.content) course.content = {} as any;
-    const content = course.content as any;
-
     try {
-      // 1. Handle Thumbnail Update
+      // Handle thumbnail upload
       if (files?.thumbnail?.[0]) {
         const result = await uploadToR2(files.thumbnail[0], "courses/thumbnails");
         uploadedKeys.push(result.key);
@@ -411,7 +490,7 @@ export const updateCourse = catchAsync(
         course.thumbnail = result.url;
       }
 
-      // 2. Handle Video Update
+      // Handle video upload
       if (files?.video?.[0]) {
         const result = await uploadToR2(files.video[0], "courses/videos");
         uploadedKeys.push(result.key);
@@ -419,103 +498,171 @@ export const updateCourse = catchAsync(
         course.videoUrl = result.url;
       }
 
-      // 3. Handle Instructor Image Update
+      // ✅ FIX: Handle instructor image upload ONCE (previously uploaded twice)
+      let newInstructorImageUrl = "";
       if (files?.instructorImage?.[0]) {
         const result = await uploadToR2(files.instructorImage[0], "courses/instructors");
+        newInstructorImageUrl = result.url;
         uploadedKeys.push(result.key);
-        const oldInstructorImage = content.instructor?.image;
+        const oldInstructorImage = course.content?.instructor?.image;
         if (oldInstructorImage) oldUrlsToDelete.push(oldInstructorImage);
-        if (!content.instructor) content.instructor = {};
-        content.instructor.image = result.url;
       }
 
-      // 4. Handle Media Files Update
+      // ============================================
+      // ✅ FIX #1: Parse content FIRST
+      // ============================================
+      const parsedContent = parseJSON(req.body.content) || {};
+
+      // Handle media file uploads and map URLs
       if (files?.mediaFiles?.length) {
-        const mediaFileUrls: string[] = [];
+        const mediaFileUrls: { url: string; type: "image" | "video" }[] = [];
         for (const file of files.mediaFiles) {
           const result = await uploadToR2(file, "courses/media");
-          mediaFileUrls.push(result.url);
+          mediaFileUrls.push({
+            url: result.url,
+            type: file.mimetype.startsWith("video") ? "video" : "image"
+          });
           uploadedKeys.push(result.key);
         }
-        const newContent = parseJSON(req.body.content) || {};
-        if (newContent.mediaAssets) {
+
+        // Map uploaded URLs to mediaAssets
+        if (parsedContent.mediaAssets) {
           let urlIndex = 0;
-          newContent.mediaAssets = newContent.mediaAssets.map((asset: any) => {
-            if (asset.isNew && mediaFileUrls[urlIndex]) {
-              const url = mediaFileUrls[urlIndex++];
+          parsedContent.mediaAssets = parsedContent.mediaAssets.map((asset: any) => {
+            if ((asset.isNew || asset.src?.startsWith('blob:')) && mediaFileUrls[urlIndex]) {
+              const uploaded = mediaFileUrls[urlIndex++];
               return {
-                type: asset.type || (url.match(/\.(mp4|webm|mov)/i) ? "video" : "image"),
-                src: url,
+                type: uploaded.type,
+                src: uploaded.url,
                 poster: asset.poster || "",
               };
             }
             return asset;
           });
+
+          // Add any remaining uploaded files as new assets
+          while (urlIndex < mediaFileUrls.length) {
+            const uploaded = mediaFileUrls[urlIndex++];
+            parsedContent.mediaAssets.push({
+              type: uploaded.type,
+              src: uploaded.url,
+            });
+          }
         }
-        Object.assign(content, newContent);
-      } else if (req.body.content) {
-        const newContent = parseJSON(req.body.content) || {};
-        Object.assign(content, newContent);
       }
 
-      // 5. Update Basic Fields
-      if (req.body.slug && req.body.slug !== course.slug) course.slug = req.body.slug;
-      if (req.body.title) course.title = parseJSON(req.body.title);
-      if (req.body.category) course.category = req.body.category;
-      
+      // Apply the newly uploaded instructor image URL to parsed content
+      if (newInstructorImageUrl) {
+        if (!parsedContent.instructor) parsedContent.instructor = {};
+        parsedContent.instructor.image = newInstructorImageUrl;
+      }
+
+      // ============================================
+      // ✅ FIX #2: Use DEEP MERGE instead of shallow spread
+      // If parsedContent.instructor only has { name: "X" }, deep merge ensures
+      // existing { title: "Y", designation: "Z" } are NOT wiped out.
+      // ============================================
+      const existingContent = course.content ? JSON.parse(JSON.stringify(course.content)) : {};
+      course.content = deepMerge(existingContent, parsedContent) as any;
+
+      // ============================================
+      // ✅ FIX #3: Update top-level fields from content
+      // ============================================
+      if (course.content) {
+        const c = course.content as any;
+        if (c.hero?.title) course.title = c.hero.title;
+        if (c.hero?.subtitle) course.heroSubtitle = c.hero.subtitle;
+        if (c.overview?.content) course.description = c.overview.content;
+        if (c.quickInfo) course.quickInfo = c.quickInfo;
+        if (c.levels) course.levels = c.levels;
+        if (c.features) course.features = c.features;
+        if (c.faq) course.faqs = c.faq;
+      }
+
+      // Update simple fields
+      if (req.body.slug !== undefined && req.body.slug !== course.slug) {
+        course.slug = req.body.slug;
+      }
+      if (req.body.title) {
+        course.title = parseJSON(req.body.title);
+      }
+      if (req.body.category) {
+        course.category = req.body.category;
+      }
       if (req.body.price !== undefined) {
         const p = parseFloat(req.body.price);
         if (!isNaN(p)) course.price = p;
       }
-      
       if (req.body.originalPrice !== undefined) {
         const op = parseFloat(req.body.originalPrice);
         course.originalPrice = !isNaN(op) ? op : undefined;
       }
-      
-      if (req.body.duration) course.duration = parseJSON(req.body.duration);
-      if (req.body.instructorName) course.instructorName = req.body.instructorName;
-      if (req.body.heroSubtitle) course.heroSubtitle = parseJSON(req.body.heroSubtitle);
-      if (req.body.quickInfo) course.quickInfo = parseJSON(req.body.quickInfo);
-      if (req.body.levels) course.levels = parseJSON(req.body.levels);
-      if (req.body.features) course.features = parseJSON(req.body.features);
-      if (req.body.faqs) course.faqs = parseJSON(req.body.faqs);
-
-      if (req.body.contentEn !== undefined || req.body.contentBn !== undefined) {
-        if (!content.overview) content.overview = {};
-        if (!content.overview.content) content.overview.content = { en: "", bn: "" };
-        if (req.body.contentEn !== undefined) content.overview.content.en = req.body.contentEn;
-        if (req.body.contentBn !== undefined) content.overview.content.bn = req.body.contentBn;
-        course.description = content.overview.content;
+      if (req.body.duration) {
+        course.duration = parseJSON(req.body.duration);
+      }
+      if (req.body.instructorName) {
+        course.instructorName = req.body.instructorName;
       }
 
+      // Update publish status
       if (req.body.isPublished !== undefined) {
         const isPublished = req.body.isPublished === "true" || req.body.isPublished === true;
         course.isPublished = isPublished;
-        course.publishedAt = isPublished ? new Date() : undefined;
+        course.publishedAt = isPublished ? (course.publishedAt || new Date()) : undefined;
       }
 
+      // ============================================
+      // ✅ FIX #4: Mark content as modified (safety net for Mongoose)
+      // ============================================
+      course.markModified('content');
+
+      console.log("=== SAVING COURSE UPDATE ===");
+      console.log("Content keys:", Object.keys(course.content || {}));
+      console.log("Media assets:", (course.content as any)?.mediaAssets?.length || 0);
+      
       await course.save();
+      
+      console.log("=== COURSE UPDATED SUCCESSFULLY ===");
 
-      // Cleanup old files after successful save
-      for (const url of oldUrlsToDelete) await deleteFromR2(url);
+      // Delete old URLs after successful save
+      for (const url of oldUrlsToDelete) {
+        await deleteFromR2(url);
+      }
 
-      res.status(200).json({ success: true, data: course, message: "Course updated successfully" });
+      res.status(200).json({ 
+        success: true, 
+        data: course, 
+        message: "Course updated successfully" 
+      });
 
     } catch (error: any) {
-      for (const key of uploadedKeys) await R2Service.deleteFile(key).catch(console.error);
+      console.error("Update error:", error);
+      
+      // Cleanup uploaded files on error
+      for (const key of uploadedKeys) {
+        await R2Service.deleteFile(key).catch(console.error);
+      }
 
       if (error.code === 11000) {
         const field = Object.keys(error.keyValue)[0];
-        return res.status(400).json({ success: false, message: `${field} already exists` });
+        return res.status(400).json({ 
+          success: false, 
+          message: `${field} already exists` 
+        });
       }
 
       if (error.name === "ValidationError") {
         const messages = Object.values(error.errors).map((err: any) => err.message);
-        return res.status(400).json({ success: false, message: messages.join(", ") });
+        return res.status(400).json({ 
+          success: false, 
+          message: messages.join(", ") 
+        });
       }
 
-      return res.status(500).json({ success: false, message: error.message || "Failed to update course" });
+      return res.status(500).json({ 
+        success: false, 
+        message: error.message || "Failed to update course" 
+      });
     }
   },
 );
@@ -534,7 +681,6 @@ export const deleteCourse = catchAsync(
       });
     }
 
-    // Authorization
     if (
       course.instructor?.toString() !== req.user?._id?.toString() &&
       req.user?.role !== "admin"

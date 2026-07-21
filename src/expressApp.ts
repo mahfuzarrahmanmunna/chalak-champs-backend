@@ -1,4 +1,4 @@
-// src/express.App.ts
+// src/expressApp.ts
 
 import express from "express";
 import cors from "cors";
@@ -19,28 +19,25 @@ import orderRoutes from "./routes/orderRoutes";
 import promoRoutes from "./routes/promoRoutes";
 import heroRoutes from "./routes/heroRoutes";
 import featureCoursesBannerRoutes from "./routes/featureCoursesBannerRoutes";
-import videoGalleryRoutes from "./routes/videoGalleryRoute";   
-
-
+import videoGalleryRoutes from "./routes/videoGalleryRoute";
 
 /**
  * Builds the Express app (middleware + routes) without calling listen().
- * Mongo is ensured on each request — readyState checks are cheap once connected.
  */
 export function createExpressApp() {
   const app = express();
 
-  app.use("/api", async (req, _res, next) => {
-    try {
-      await ensureMongoConnected();
-      next();
-    } catch (e) {
-      next(e);
-    }
-  });
-
+  // ==========================================
+  // 1. SECURITY & PARSING (Must be first)
+  // ==========================================
   app.use(helmet());
+  app.use(morgan("dev"));
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+  // ==========================================
+  // 2. CORS CONFIGURATION (Must be before DB check)
+  // ==========================================
   const localOrigins = [
     "https://chalakchamps.com",
     "http://127.0.0.1:3000",
@@ -50,7 +47,12 @@ export function createExpressApp() {
   ];
 
   const allowedOrigins = [
-    process.env.FRONTEND_URL || "https://chalakchamps.com",
+    process.env.FRONTEND_URL || "https://chalakchamps.com", 
+    "http://127.0.0.1:3000",
+    "https://localhost:3000",
+    "http://localhost:3000",
+    "https://127.0.0.1:3000",
+    "https://chalakchamps.vercel.app",
   ].filter((origin): origin is string => Boolean(origin));
 
   const isDevelopment = process.env.NODE_ENV !== "production";
@@ -105,13 +107,27 @@ export function createExpressApp() {
       optionsSuccessStatus: 200,
     }),
   );
-  app.use(morgan("dev"));
-  app.use(express.json({ limit: "10mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-  // Use cwd so this works after bundling for Cloudflare Workers (no __dirname in ESM bundles).
+  // ==========================================
+  // 3. STATIC FILES
+  // ==========================================
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+  // ==========================================
+  // 4. DATABASE CONNECTION (Moved here, AFTER CORS)
+  // ==========================================
+  app.use("/api", async (req, _res, next) => {
+    try {
+      await ensureMongoConnected();
+      next();
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ==========================================
+  // 5. ROUTES
+  // ==========================================
   app.use("/api/auth", authRoutes);
   app.use("/auth", authRoutes);
   app.use("/api/courses", courseRoutes);
@@ -121,31 +137,38 @@ export function createExpressApp() {
   app.use("/api/freebookingprops", freeBookingRoutes);
   app.use("/api/exam", examRoutes);
   app.use("/api/enrollments", enrollmentRoutes);
-  app.use("/api/cta", ctaRoutes); // <--- Use the route
+  app.use("/api/cta", ctaRoutes);
   app.use("/api/products", productRoutes);
-
   app.use("/api/orders", orderRoutes);
   app.use("/api/promo", promoRoutes);
   app.use("/api/hero", heroRoutes);
   app.use("/api/feature-courses-banner", featureCoursesBannerRoutes);
-  app.use("/api/video-gallery", videoGalleryRoutes);   
+  app.use("/api/video-gallery", videoGalleryRoutes);
 
-
+  // ==========================================
+  // 6. HEALTH & ROOT ROUTES
+  // ==========================================
   app.get("/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date() });
   });
 
   app.get("/", (req, res) => {
-  res.json({
-    success: true,
-    message: "Chalak Champs API Running 🚀",
+    res.json({
+      success: true,
+      message: "Chalak Champs API Running 🚀",
+    });
   });
-});
 
+  // ==========================================
+  // 7. 404 HANDLER
+  // ==========================================
   app.use((req, res) => {
     res.status(404).json({ message: "Route not found" });
   });
 
+  // ==========================================
+  // 8. GLOBAL ERROR HANDLER (Includes CORS so errors are visible)
+  // ==========================================
   app.use(
     (
       err: unknown,
@@ -156,6 +179,13 @@ export function createExpressApp() {
       console.error("Server Error:", err);
       const message =
         err instanceof Error ? err.message : "Internal Server Error";
+      
+      // Add CORS headers to errors so the frontend can actually read the error message
+      const origin = _req.headers.origin as string | undefined;
+      if (allowLocalhost || !origin || allowedOrigins.includes(origin || "")) {
+        res.setHeader("Access-Control-Allow-Origin", origin || "*");
+      }
+
       res.status(500).json({ message });
     },
   );

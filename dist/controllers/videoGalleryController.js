@@ -3,11 +3,33 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.upsertVideoGallery = exports.getVideoGallery = void 0;
-const VideoGallery_1 = __importDefault(require("../models/VideoGallery")); // Import IVideoItem
+exports.deleteVideo = exports.upsertVideoGallery = exports.getVideoGallery = void 0;
+const VideoGallery_1 = __importDefault(require("../models/VideoGallery"));
+const r2_service_1 = require("../services/r2.service");
+// --- HELPERS ---
+const uploadToR2 = async (file, folder) => {
+    if (!file.buffer?.length) {
+        throw new Error(`Empty file buffer for ${file.originalname}`);
+    }
+    const subFolder = "images";
+    return r2_service_1.R2Service.uploadFile(file.buffer, file.mimetype, `${folder}/${subFolder}`);
+};
+const deleteFromR2 = async (url) => {
+    if (!url)
+        return;
+    try {
+        const key = r2_service_1.R2Service.extractKeyFromUrl(url);
+        if (key) {
+            await r2_service_1.R2Service.deleteFile(key);
+        }
+    }
+    catch (err) {
+        console.error("Failed to delete from R2:", err);
+    }
+};
+// --- CONTROLLERS ---
 const getVideoGallery = async (req, res) => {
     try {
-        // Fetch the single document, or return default empty state
         let gallery = await VideoGallery_1.default.findOne();
         if (!gallery) {
             gallery = await VideoGallery_1.default.create({
@@ -16,7 +38,6 @@ const getVideoGallery = async (req, res) => {
                 videos: [],
             });
         }
-        // FIX: Add explicit types to the callback parameters
         const activeVideos = gallery.videos
             .filter((v) => v.isActive)
             .sort((a, b) => a.order - b.order);
@@ -34,12 +55,35 @@ const getVideoGallery = async (req, res) => {
     }
 };
 exports.getVideoGallery = getVideoGallery;
-// Admin endpoint to upsert the entire section
+// ✅ FIX: Reverted to standard Request, and safely cast files inside
 const upsertVideoGallery = async (req, res) => {
     try {
-        const { title, subtitle, videos } = req.body;
-        const updatedGallery = await VideoGallery_1.default.findOneAndUpdate({}, // Find the single document
-        { title, subtitle, videos }, { new: true, upsert: true, runValidators: true });
+        const parsedData = JSON.parse(req.body.data);
+        const { title, subtitle, videos } = parsedData;
+        // Safely cast the files array since upload.array() ensures it's an array of Multer files
+        const files = req.files || [];
+        let fileIndex = 0;
+        // ✅ FIX: Added 'async' to the map callback to allow 'await' inside
+        const processedVideos = await Promise.all(videos.map(async (v) => {
+            let thumbnailUrl = v.thumbnail === "__NEW_FILE__" ? "" : (v.thumbnail || "");
+            if (v.thumbnail === "__NEW_FILE__" && files[fileIndex]) {
+                try {
+                    const result = await uploadToR2(files[fileIndex], "video-gallery/thumbnails");
+                    thumbnailUrl = result.url;
+                }
+                catch (uploadError) {
+                    console.error("Failed to upload thumbnail:", uploadError);
+                }
+                fileIndex++;
+            }
+            return {
+                youtubeId: v.youtubeId,
+                thumbnail: thumbnailUrl,
+                order: v.order || 0,
+                isActive: v.isActive !== false,
+            };
+        }));
+        const updatedGallery = await VideoGallery_1.default.findOneAndUpdate({}, { title, subtitle, videos: processedVideos }, { new: true, upsert: true, runValidators: true });
         res.status(200).json({ success: true, data: updatedGallery });
     }
     catch (error) {
@@ -47,3 +91,26 @@ const upsertVideoGallery = async (req, res) => {
     }
 };
 exports.upsertVideoGallery = upsertVideoGallery;
+const deleteVideo = async (req, res) => {
+    try {
+        const { youtubeId } = req.params;
+        const gallery = await VideoGallery_1.default.findOne();
+        if (!gallery) {
+            return res.status(404).json({ success: false, message: "Gallery not found" });
+        }
+        // ✅ FIX: Added explicit type (v: IVideoItem) to the find callback
+        const videoToDelete = gallery.videos.find((v) => v.youtubeId === youtubeId);
+        if (!videoToDelete) {
+            return res.status(404).json({ success: false, message: "Video not found in gallery" });
+        }
+        if (videoToDelete.thumbnail) {
+            await deleteFromR2(videoToDelete.thumbnail);
+        }
+        await VideoGallery_1.default.updateOne({}, { $pull: { videos: { youtubeId } } });
+        res.status(200).json({ success: true, message: "Video deleted successfully" });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message || "Server Error" });
+    }
+};
+exports.deleteVideo = deleteVideo;
