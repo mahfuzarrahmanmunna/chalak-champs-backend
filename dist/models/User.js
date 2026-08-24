@@ -36,9 +36,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const UserSchema = new mongoose_1.Schema({
     uid: { type: String, required: true, unique: true, index: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: {
+        type: String,
+        required: true,
+        unique: true,
+        lowercase: true,
+        trim: true,
+    },
     firstName: { type: String, required: true, trim: true },
-    lastName: { type: String, required: true, trim: true },
+    lastName: { type: String, required: false, trim: true, default: "" },
     fullName: { type: String, trim: true },
     phoneNumber: { type: String, trim: true },
     avatar: { type: String },
@@ -51,13 +57,9 @@ const UserSchema = new mongoose_1.Schema({
     isActive: { type: Boolean, default: true },
     bio: { type: String, trim: true },
 }, { timestamps: true });
-// UserSchema.index({ email: 1 });
-UserSchema.index({ role: 1 });
 UserSchema.virtual("fullNameVirtual").get(function () {
     return `${this.firstName} ${this.lastName}`.trim();
 });
 UserSchema.set("toJSON", { virtuals: true });
 UserSchema.set("toObject", { virtuals: true });
-// ONLY keep this one, delete the { role: 1 } index!
-UserSchema.index({ email: 1 });
 exports.default = mongoose_1.default.model("User", UserSchema);

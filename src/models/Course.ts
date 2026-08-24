@@ -1,10 +1,9 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 // --- HELPERS ---
-// Automatically fixes primitive strings into { en, bn } objects
 const sanitizeBilingual = (val: any): { en: string; bn: string } => {
   if (!val) return { en: "", bn: "" };
-  if (typeof val === "string") return { en: val, bn: val }; // Fixes corrupt DB strings!
+  if (typeof val === "string") return { en: val, bn: val };
   if (typeof val === "object" && val !== null) {
     return {
       en: typeof val.en === "string" ? val.en : String(val.en || ""),
@@ -20,7 +19,7 @@ const BilingualSchema = new Schema(
     en: { type: String, default: "" },
     bn: { type: String, default: "" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 // --- Interfaces ---
@@ -29,24 +28,27 @@ export interface IBilingualText {
   bn: string;
 }
 
-export interface ILevel {
+export interface IInstructor {
   title: IBilingualText;
-  description: IBilingualText;
-  target: IBilingualText;
-  topics: string[];
+  name: string;
+  designation: IBilingualText;
+  bio: IBilingualText;
+  experience: IBilingualText;
+  studentsCount: number;
+  rating: number;
+  specializations: { en: string[]; bn: string[] };
+  achievements: { en: string[]; bn: string[] };
+  education: IBilingualText;
+  image: string;
+  isNewImage?: boolean;
+  tempImageIndex?: number;
+  social: {
+    facebook?: string;
+    linkedin?: string;
+    youtube?: string;
+  };
 }
 
-export interface IFeature {
-  title: IBilingualText;
-  desc: IBilingualText;
-}
-
-export interface IFaq {
-  question: string;
-  answer: string;
-}
-
-// ✅ NEW: Full Content Interface matching your JSON structure
 export interface ICourseContent {
   breadcrumb?: IBilingualText;
   hero?: {
@@ -108,6 +110,10 @@ export interface ICourseContent {
     title: IBilingualText;
     description: IBilingualText;
   };
+  // ✅ CHANGED: Single instructor → Multiple instructors
+  instructorsTitle?: IBilingualText;
+  instructors?: IInstructor[];
+  // ✅ KEPT for backward compatibility with old data
   instructor?: {
     title: IBilingualText;
     name: string;
@@ -142,7 +148,6 @@ export interface ICourseContent {
   }[];
 }
 
-// ✅ UPDATED: Main Course Interface with `content` added
 export interface ICourse extends Document {
   _id: mongoose.Types.ObjectId;
   slug?: string;
@@ -166,10 +171,7 @@ export interface ICourse extends Document {
   faqs: any;
   category?: string;
   level?: string;
-  
-  // ✅ ADDED THIS: The full bilingual content structure
   content?: ICourseContent;
-  
   isPublished: boolean;
   publishedAt?: Date;
   createdAt?: Date;
@@ -188,7 +190,6 @@ const CourseSchema: Schema = new Schema(
     title: { type: BilingualSchema, required: true },
     heroSubtitle: { type: BilingualSchema },
     description: { type: BilingualSchema, default: { en: "", bn: "" } },
-
     instructor: { type: Schema.Types.ObjectId, ref: "User", required: true },
     instructorName: { type: String },
     duration: { type: BilingualSchema, default: { en: "", bn: "" } },
@@ -198,36 +199,27 @@ const CourseSchema: Schema = new Schema(
     thumbnailDeleteUrl: { type: String },
     videoUrl: { type: String },
     videoDeleteUrl: { type: String },
-    
     quickInfo: { type: Schema.Types.Mixed, default: {} },
     offerDetails: { type: String },
     courseOverview: { type: String },
     levels: { type: Schema.Types.Mixed, default: {} },
     features: { type: Schema.Types.Mixed, default: {} },
     faqs: { type: Schema.Types.Mixed, default: {} },
-
     category: { type: String, default: "general" },
     level: { type: String },
-
-    // ✅ ADDED THIS: Schema definition for content
     content: { type: Schema.Types.Mixed, default: {} },
-
     isPublished: { type: Boolean, default: false },
     publishedAt: { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-// ✅ FIXED: Pre-save hook with built-in sanitization
 CourseSchema.pre("save", { document: true, query: false }, async function () {
-  // 1. SANITIZE BILINGUAL FIELDS (Fixes the "Tried to set nested object to primitive" error)
-  // This converts bad strings like "Non pariatur Dolore" into { en: "Non...", bn: "Non..." } 
   this.title = sanitizeBilingual(this.title);
   this.heroSubtitle = sanitizeBilingual(this.heroSubtitle);
   this.description = sanitizeBilingual(this.description);
   this.duration = sanitizeBilingual(this.duration);
 
-  // 2. SLUG GENERATION
   if (this.isModified("title") && !this.slug) {
     const titleEn = (this.title as any).en || "";
     this.slug = titleEn
@@ -236,7 +228,6 @@ CourseSchema.pre("save", { document: true, query: false }, async function () {
       .replace(/(^-|-$)/g, "");
   }
 
-  // 3. PUBLISH DATE
   if (this.isPublished && !this.publishedAt) {
     this.publishedAt = new Date();
   }

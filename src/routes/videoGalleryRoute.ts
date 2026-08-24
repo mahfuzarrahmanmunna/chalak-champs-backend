@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import * as videoGalleryController from "../controllers/videoGalleryController";
+import { uploadVideoThumbnails } from "../middleware/upload";
 
 const router = Router();
 
@@ -11,7 +12,12 @@ router.get("/", videoGalleryController.getVideoGallery);
 
 // ✅ FIX: Changed from upload.any() to upload.array("thumbnails")
 // This strictly looks for the "thumbnails" field and correctly types req.files as an array
-router.post("/", upload.array("thumbnails"), videoGalleryController.upsertVideoGallery);
+router.post(
+  "/",
+  uploadVideoThumbnails,
+  videoGalleryController.upsertVideoGallery,
+);
+
 
 router.delete("/:youtubeId", videoGalleryController.deleteVideo);
 

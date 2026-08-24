@@ -35,12 +35,11 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 // --- HELPERS ---
-// Automatically fixes primitive strings into { en, bn } objects
 const sanitizeBilingual = (val) => {
     if (!val)
         return { en: "", bn: "" };
     if (typeof val === "string")
-        return { en: val, bn: val }; // Fixes corrupt DB strings!
+        return { en: val, bn: val };
     if (typeof val === "object" && val !== null) {
         return {
             en: typeof val.en === "string" ? val.en : String(val.en || ""),
@@ -82,20 +81,15 @@ const CourseSchema = new mongoose_1.Schema({
     faqs: { type: mongoose_1.Schema.Types.Mixed, default: {} },
     category: { type: String, default: "general" },
     level: { type: String },
-    // ✅ ADDED THIS: Schema definition for content
     content: { type: mongoose_1.Schema.Types.Mixed, default: {} },
     isPublished: { type: Boolean, default: false },
     publishedAt: { type: Date },
 }, { timestamps: true });
-// ✅ FIXED: Pre-save hook with built-in sanitization
 CourseSchema.pre("save", { document: true, query: false }, async function () {
-    // 1. SANITIZE BILINGUAL FIELDS (Fixes the "Tried to set nested object to primitive" error)
-    // This converts bad strings like "Non pariatur Dolore" into { en: "Non...", bn: "Non..." } 
     this.title = sanitizeBilingual(this.title);
     this.heroSubtitle = sanitizeBilingual(this.heroSubtitle);
     this.description = sanitizeBilingual(this.description);
     this.duration = sanitizeBilingual(this.duration);
-    // 2. SLUG GENERATION
     if (this.isModified("title") && !this.slug) {
         const titleEn = this.title.en || "";
         this.slug = titleEn
@@ -103,7 +97,6 @@ CourseSchema.pre("save", { document: true, query: false }, async function () {
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/(^-|-$)/g, "");
     }
-    // 3. PUBLISH DATE
     if (this.isPublished && !this.publishedAt) {
         this.publishedAt = new Date();
     }

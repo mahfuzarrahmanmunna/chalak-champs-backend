@@ -75,9 +75,7 @@ export const uploadToR2 = async (
   } catch (error) {
     if (error instanceof MulterError) {
       if (error.code === "LIMIT_FILE_SIZE") {
-        res
-          .status(400)
-          .json({ success: false, message: "Image too large" });
+        res.status(400).json({ success: false, message: "Image too large" });
         return;
       }
 
@@ -168,9 +166,7 @@ export interface CourseMulterFiles {
 }
 
 // Helper to get files from request
-export function getCourseFiles(
-  req: Request,
-): CourseMulterFiles {
+export function getCourseFiles(req: Request): CourseMulterFiles {
   const files = req.files as Record<string, Express.Multer.File[]> | undefined;
   if (!files) return {};
 
@@ -179,5 +175,73 @@ export function getCourseFiles(
     video: files.video,
     instructorImage: files.instructorImage,
     mediaFiles: files.mediaFiles,
+  };
+}
+
+export const uploadVideoThumbnails = multer({
+  storage,
+  fileFilter: imageFileFilter, // Reuses your existing strict image filter
+  limits: {
+    fileSize: maxImageSizeBytes, // Reuses your 5MB limit from config
+    files: 20, // Allow up to 20 thumbnails at once
+  },
+}).array("thumbnails"); // Expects frontend to use fd.append("thumbnails", file)
+
+const moduleFileFilter = (
+  req: Request,
+  file: Express.Multer.File,
+  cb: FileFilterCallback,
+) => {
+  if (!file?.mimetype) {
+    cb(new Error("Invalid file upload"));
+    return;
+  }
+
+  const allowedImageTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ];
+  const allowedVideoTypes = ["video/mp4", "video/webm", "video/quicktime"];
+  const allowed = [...allowedImageTypes, ...allowedVideoTypes];
+
+  if (!allowed.includes(file.mimetype)) {
+    cb(
+      new Error(
+        "Unsupported file type. Allowed: jpg, png, webp, gif, mp4, webm",
+      ),
+    );
+    return;
+  }
+
+  cb(null, true);
+};
+
+const uploadModule = multer({
+  storage, // memoryStorage from top of file
+  fileFilter: moduleFileFilter,
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB to support video uploads
+    files: 2, // thumbnail + video
+  },
+});
+
+export const uploadModuleMedia = uploadModule.fields([
+  { name: "thumbnail", maxCount: 1 },
+  { name: "video", maxCount: 1 },
+]);
+
+export interface ModuleMulterFiles {
+  thumbnail?: Express.Multer.File[];
+  video?: Express.Multer.File[];
+}
+
+export function getModuleFiles(req: Request): ModuleMulterFiles {
+  const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+  if (!files) return {};
+  return {
+    thumbnail: files.thumbnail,
+    video: files.video,
   };
 }

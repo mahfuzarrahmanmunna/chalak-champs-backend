@@ -22,7 +22,6 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
 
     const skip = (page - 1) * limit;
 
-    // Build search query
     const query: any = {};
 
     if (search) {
@@ -46,7 +45,6 @@ export const getUsers = async (req: Request, res: Response): Promise<void> => {
       query.isPhoneVerified = isPhoneVerified === "true";
     }
 
-    // Get users and total count
     const [users, totalCount] = await Promise.all([
       User.find(query)
         .sort({ createdAt: -1 })
@@ -88,33 +86,26 @@ export const getUserById = async (
     const { id } = req.params as { id: string };
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid user ID",
-      });
+      res.status(400).json({ success: false, message: "Invalid user ID" });
       return;
     }
 
     const user = await User.findById(id).select("-__v");
 
     if (!user) {
-      res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      res.status(404).json({ success: false, message: "User not found" });
       return;
     }
 
-    res.status(200).json({
-      success: true,
-      user: user,
-    });
+    res.status(200).json({ success: true, user: user });
   } catch (error: any) {
     console.error("Error fetching user:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch user",
-    });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to fetch user",
+      });
   }
 };
 
@@ -132,22 +123,22 @@ export const createUserByAdmin = async (
       role = "student",
     } = req.body;
 
-    // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ email }, ...(phoneNumber ? [{ phoneNumber }] : [])],
     });
 
     if (existingUser) {
-      res.status(400).json({
-        success: false,
-        message: "User with this email or phone number already exists",
-      });
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: "User with this email or phone number already exists",
+        });
       return;
     }
 
-    // Create new user
     const user = new User({
-      uid: new mongoose.Types.ObjectId().toString(), // Generate temporary UID
+      uid: new mongoose.Types.ObjectId().toString(),
       email,
       firstName,
       lastName,
@@ -159,30 +150,28 @@ export const createUserByAdmin = async (
 
     await user.save();
 
-    // Send verification emails/SMS if needed
-    if (email) {
-      await sendVerificationEmail(email);
-    }
+    if (email) await sendVerificationEmail(email);
+    if (phoneNumber) await sendPhoneVerification(phoneNumber);
 
-    if (phoneNumber) {
-      await sendPhoneVerification(phoneNumber);
-    }
-
-    res.status(201).json({
-      success: true,
-      message: "User created successfully",
-      user: user,
-    });
+    res
+      .status(201)
+      .json({
+        success: true,
+        message: "User created successfully",
+        user: user,
+      });
   } catch (error: any) {
     console.error("Error creating user:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to create user",
-    });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to create user",
+      });
   }
 };
 
-// Update user
+// Update user (Including Role Change)
 export const updateUser = async (
   req: Request,
   res: Response,
@@ -192,17 +181,11 @@ export const updateUser = async (
     const updates = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid user ID",
-      });
+      res.status(400).json({ success: false, message: "Invalid user ID" });
       return;
     }
 
-    // Convert string ID to ObjectId
     const objectId = new mongoose.Types.ObjectId(id);
-
-    // Don't allow updating UID or email to existing one
     const { uid, email, ...allowedUpdates } = updates;
 
     if (email) {
@@ -211,10 +194,9 @@ export const updateUser = async (
         _id: { $ne: objectId },
       });
       if (existingUser) {
-        res.status(400).json({
-          success: false,
-          message: "Email already exists",
-        });
+        res
+          .status(400)
+          .json({ success: false, message: "Email already exists" });
         return;
       }
       allowedUpdates.email = email;
@@ -227,24 +209,25 @@ export const updateUser = async (
     ).select("-__v");
 
     if (!user) {
-      res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      res.status(404).json({ success: false, message: "User not found" });
       return;
     }
 
-    res.status(200).json({
-      success: true,
-      message: "User updated successfully",
-      user: user,
-    });
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "User updated successfully",
+        user: user,
+      });
   } catch (error: any) {
     console.error("Error updating user:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to update user",
-    });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to update user",
+      });
   }
 };
 
@@ -257,33 +240,28 @@ export const deleteUser = async (
     const { id } = req.params as { id: string };
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid user ID",
-      });
+      res.status(400).json({ success: false, message: "Invalid user ID" });
       return;
     }
 
     const user = await User.findByIdAndDelete(id);
 
     if (!user) {
-      res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      res.status(404).json({ success: false, message: "User not found" });
       return;
     }
 
-    res.status(200).json({
-      success: true,
-      message: "User deleted successfully",
-    });
+    res
+      .status(200)
+      .json({ success: true, message: "User deleted successfully" });
   } catch (error: any) {
     console.error("Error deleting user:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to delete user",
-    });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to delete user",
+      });
   }
 };
 
@@ -296,29 +274,24 @@ export const bulkDeleteUsers = async (
     const { userIds } = req.body;
 
     if (!Array.isArray(userIds) || userIds.length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "User IDs array is required",
-      });
+      res
+        .status(400)
+        .json({ success: false, message: "User IDs array is required" });
       return;
     }
 
-    // Validate all IDs
     const validIds = userIds.filter((id) =>
       mongoose.Types.ObjectId.isValid(id),
     );
 
     if (validIds.length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "No valid user IDs provided",
-      });
+      res
+        .status(400)
+        .json({ success: false, message: "No valid user IDs provided" });
       return;
     }
 
-    // Convert string IDs to ObjectIds
     const objectIds = validIds.map((id) => new mongoose.Types.ObjectId(id));
-
     const result = await User.deleteMany({ _id: { $in: objectIds } });
 
     res.status(200).json({
@@ -328,10 +301,66 @@ export const bulkDeleteUsers = async (
     });
   } catch (error: any) {
     console.error("Error bulk deleting users:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to delete users",
-    });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to delete users",
+      });
+  }
+};
+
+// ==========================================
+// PERMISSION MANAGEMENT CONTROLLERS
+// ==========================================
+
+// Get user permissions
+export const getUserPermissions = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const user = await User.findById(req.params.id).select(
+      "firstName lastName role permissions",
+    );
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+    res.status(200).json({ success: true, user });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update user permissions
+export const updateUserPermissions = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { permissions } = req.body;
+    if (!Array.isArray(permissions)) {
+      res
+        .status(400)
+        .json({ success: false, message: "Permissions must be an array" });
+      return;
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { permissions },
+      { new: true },
+    ).select("firstName lastName role permissions");
+
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    res.status(200).json({ success: true, user });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -345,7 +374,6 @@ export const getUserStats = async (
   res: Response,
 ): Promise<void> => {
   try {
-    // 1. Fetch User Stats
     const [
       totalUsers,
       adminUsers,
@@ -389,7 +417,6 @@ export const getUserStats = async (
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
-    // 2. Fetch Course Stats
     let totalCourses = 0;
     let activeCourses = 0;
     let totalLessons = 0;
@@ -398,11 +425,9 @@ export const getUserStats = async (
       totalCourses = await Course.countDocuments();
       activeCourses = await Course.countDocuments({ status: "active" });
 
-      // FIX: Cast 'course' to 'any' to avoid TypeScript error if 'lessons' is missing from ICourse interface
       const coursesWithLessons = await Course.find({
         lessons: { $exists: true, $ne: [] },
       });
-
       totalLessons = coursesWithLessons.reduce((acc, course: any) => {
         return acc + (course.lessons ? course.lessons.length : 0);
       }, 0);
@@ -410,7 +435,6 @@ export const getUserStats = async (
       console.warn("Course model not found or error fetching courses:", err);
     }
 
-    // 3. Calculate new users this month
     const startOfMonth = new Date(
       new Date().getFullYear(),
       new Date().getMonth(),
@@ -425,11 +449,10 @@ export const getUserStats = async (
       stats: {
         totalUsers,
         totalCourses,
-        totalRevenue: 0, // TODO: Implement Payment logic
+        totalRevenue: 0,
         totalLessons,
         newUsersThisMonth,
         activeCourses,
-        // Extras
         adminUsers,
         studentUsers,
         recentUsers,
@@ -438,10 +461,12 @@ export const getUserStats = async (
     });
   } catch (error: any) {
     console.error("Error fetching user stats:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch user statistics",
-    });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to fetch user statistics",
+      });
   }
 };
 
@@ -452,22 +477,19 @@ export const getRecentCourses = async (
 ): Promise<void> => {
   try {
     const limit = parseInt(req.query.limit as string) || 5;
-
-    // Fetch recent courses
     const courses = await Course.find()
       .sort({ createdAt: -1 })
       .limit(limit)
       .select("title instructor thumbnail status createdAt");
 
-    res.status(200).json({
-      success: true,
-      courses: courses,
-    });
+    res.status(200).json({ success: true, courses: courses });
   } catch (error: any) {
     console.error("Error fetching courses:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch courses",
-    });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to fetch courses",
+      });
   }
 };

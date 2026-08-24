@@ -39,12 +39,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const multer_1 = __importDefault(require("multer"));
 const videoGalleryController = __importStar(require("../controllers/videoGalleryController"));
+const upload_1 = require("../middleware/upload");
 const router = (0, express_1.Router)();
 // Use memory storage so we can pass the buffer to R2Service
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 router.get("/", videoGalleryController.getVideoGallery);
 // ✅ FIX: Changed from upload.any() to upload.array("thumbnails")
 // This strictly looks for the "thumbnails" field and correctly types req.files as an array
-router.post("/", upload.array("thumbnails"), videoGalleryController.upsertVideoGallery);
+router.post("/", upload_1.uploadVideoThumbnails, videoGalleryController.upsertVideoGallery);
 router.delete("/:youtubeId", videoGalleryController.deleteVideo);
 exports.default = router;

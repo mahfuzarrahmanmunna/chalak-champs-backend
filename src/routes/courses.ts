@@ -1,5 +1,3 @@
-// src/routes/courses.ts
-
 import express from "express";
 import {
   createCourse,
@@ -9,7 +7,10 @@ import {
   deleteCourse,
   getInstructorCourses,
   getCourseBySlug,
+  getAdminCourses,
 } from "../controllers/CourseController";
+import { protect, authorize } from "../middleware/auth";
+import multer from "multer";
 import {
   createModule,
   getCourseModules,
@@ -17,35 +18,36 @@ import {
   deleteModule,
   deleteLesson,
 } from "../controllers/moduleController";
-import { protect, authorize, authenticate } from "../middleware/auth";
-import multer from "multer";
 import {
   getAvailableExams,
   updateLesson,
   createLesson,
 } from "../controllers/lessonController";
-// import { uploadToR2 } from "../middleware/upload"; // ✅ Removed unused import
+import { markLessonComplete } from "../controllers/progressController";
 
 const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
-});
+const upload = multer({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 
-// ✅ FIX: Custom middleware to prevent "Unexpected field" error
-const uploadAny = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Groups files by fieldname so we can handle thumbnail, video,
+// instructorImages (plural), mediaFiles etc.
+const uploadAny = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) => {
   upload.any()(req, res, (err: any) => {
     if (err) return next(err);
-    
     const filesArray = req.files as Express.Multer.File[];
     if (filesArray && filesArray.length > 0) {
-      (req as any).files = filesArray.reduce((acc, file) => {
-        if (!acc[file.fieldname]) acc[file.fieldname] = [];
-        acc[file.fieldname].push(file);
-        return acc;
-      }, {} as { [fieldname: string]: Express.Multer.File[] });
+      (req as any).files = filesArray.reduce(
+        (acc, file) => {
+          if (!acc[file.fieldname]) acc[file.fieldname] = [];
+          acc[file.fieldname].push(file);
+          return acc;
+        },
+        {} as { [fieldname: string]: Express.Multer.File[] },
+      );
     }
-    
     next();
   });
 };
@@ -53,43 +55,28 @@ const uploadAny = (req: express.Request, res: express.Response, next: express.Ne
 const router = express.Router();
 
 // =============================================
-// PUBLIC ROUTES (No auth required)
+// PUBLIC ROUTES
 // =============================================
 router.get("/", getAllCourses);
+router.get("/admin/all", protect, authorize("admin"), getAdminCourses);
 router.get("/slug/:slug", getCourseBySlug);
 router.get("/:id", getCourseById);
 
 // =============================================
-// PROTECTED ROUTES (Auth required)
+// PROTECTED ROUTES
 // =============================================
 router.use(protect);
 
-// --- Instructor Routes ---
 router.get("/instructor/my-courses", getInstructorCourses);
 
-// --- Course CRUD ---
-router.post(
-  "/",
-  authorize("instructor", "admin"),
-  uploadAny,
-  createCourse,
-);
-
-// ✅ FIX: Kept ONLY THIS ONE update route. The duplicate at the bottom has been deleted.
-router.put(
-  "/:id",
-  authorize("instructor", "admin"),
-  uploadAny,
-  updateCourse,
-);
-
+router.post("/", authorize("instructor", "admin"), uploadAny, createCourse);
+router.put("/:id", authorize("instructor", "admin"), uploadAny, updateCourse);
 router.delete("/:id", authorize("instructor", "admin"), deleteCourse);
 
 // =============================================
 // MODULE ROUTES
 // =============================================
 router.get("/:courseId/modules", getCourseModules);
-
 router.post(
   "/:courseId/modules",
   authorize("instructor", "admin"),
@@ -99,7 +86,6 @@ router.post(
   ]),
   createModule,
 );
-
 router.put(
   "/:courseId/modules/:moduleId",
   authorize("instructor", "admin"),
@@ -109,7 +95,6 @@ router.put(
   ]),
   updateModule,
 );
-
 router.delete(
   "/:courseId/modules/:moduleId",
   authorize("instructor", "admin"),
@@ -124,7 +109,6 @@ router.get(
   authorize("instructor", "admin"),
   getAvailableExams,
 );
-
 router.post(
   "/:courseId/modules/:moduleId/lessons",
   authorize("instructor", "admin"),
@@ -134,7 +118,6 @@ router.post(
   ]),
   createLesson,
 );
-
 router.put(
   "/:courseId/modules/:moduleId/lessons/:lessonId",
   authorize("instructor", "admin"),
@@ -144,11 +127,17 @@ router.put(
   ]),
   updateLesson,
 );
-
 router.delete(
   "/:courseId/modules/:moduleId/lessons/:lessonId",
   authorize("instructor", "admin"),
   deleteLesson,
 );
+
+router.post(
+  "/:courseId/modules/:moduleId/lessons/:lessonId/complete",
+  protect, // Assuming 'protect' is your auth middleware
+  markLessonComplete,
+);
+
 
 export default router;

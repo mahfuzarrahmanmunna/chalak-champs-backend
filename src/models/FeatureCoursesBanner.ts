@@ -1,16 +1,18 @@
-// backend/src/models/FeatureCoursesBanner.ts
+import mongoose, { Schema, Types } from "mongoose";
 
-import mongoose, { Schema, Document } from "mongoose";
-
-export interface IFeatureCoursesBanner extends Document {
+// 1. REMOVE "extends Document"
+// 2. ADD "_id" and "__v" manually since you are using .lean() in your controller
+export interface IFeatureCoursesBanner {
+  _id: Types.ObjectId;
   lang: "en" | "bn";
-  image: string; // R2 Public URL
-  key: string; // R2 Object Key (used for deletion)
+  image: string;
+  key: string;
   link: string;
   altText: string;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
+  __v: number;
 }
 
 const FeatureCoursesBannerSchema = new Schema<IFeatureCoursesBanner>(

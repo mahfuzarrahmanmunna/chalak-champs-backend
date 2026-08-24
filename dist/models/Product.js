@@ -1,5 +1,4 @@
 "use strict";
-// src/models/Product.ts
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -35,25 +34,43 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
+// --- HELPER: bilingual sub-schema ---
+const bilingualSchema = new mongoose_1.Schema({
+    en: { type: String, default: "" },
+    bn: { type: String, default: "" },
+}, { _id: false });
+// --- MAIN SCHEMA ---
 const ProductSchema = new mongoose_1.Schema({
-    title: { type: String, required: true },
+    // Core
+    title: { type: bilingualSchema, required: true },
+    slug: {
+        type: String,
+        required: true, // ✅ CHANGED: required instead of sparse
+        unique: true,
+        lowercase: true,
+        trim: true,
+        index: true,
+    },
     category: {
         type: String,
         required: true,
         enum: ["book", "apparel", "bags", "stationary"],
     },
-    subtitle: { type: String, default: "" },
+    subtitle: { type: bilingualSchema, default: () => ({ en: "", bn: "" }) },
     description: {
-        en: { type: String, default: "" },
-        bn: { type: String, default: "" },
+        type: bilingualSchema,
+        default: () => ({ en: "", bn: "" }),
     },
     secondaryDescription: {
-        en: { type: String, default: "" },
-        bn: { type: String, default: "" },
+        type: bilingualSchema,
+        default: () => ({ en: "", bn: "" }),
     },
     fee: { type: Number, required: true },
     originalFee: { type: Number },
     badge: { type: String },
+    isPublished: { type: Boolean, default: true },
+    sortOrder: { type: Number, default: 0 },
+    // Rich arrays
     highlights: [
         {
             en: { type: String, default: "" },
@@ -70,7 +87,7 @@ const ProductSchema = new mongoose_1.Schema({
                 en: { type: String, default: "" },
                 bn: { type: String, default: "" },
             },
-            icon: { type: String },
+            icon: { type: String, default: "" },
         },
     ],
     whyPoints: [
@@ -91,15 +108,32 @@ const ProductSchema = new mongoose_1.Schema({
             },
         },
     ],
-    author: { type: String },
+    // Book specific
+    author: { type: bilingualSchema },
     pages: { type: String },
-    publisher: { type: String },
-    edition: { type: String },
-    country: { type: String },
-    language: { type: String },
+    publisher: { type: bilingualSchema },
+    edition: { type: bilingualSchema },
+    country: { type: bilingualSchema },
+    language: { type: bilingualSchema },
+    // Bag specific
+    bagMaterial: { type: bilingualSchema },
+    bagCapacity: { type: String },
+    bagDimensions: { type: String },
+    bagCompartments: { type: Number },
+    // Apparel specific
+    apparelMaterial: { type: bilingualSchema },
+    apparelFit: { type: bilingualSchema },
+    apparelSizes: { type: String },
+    apparelColors: { type: String },
+    // Stationary specific
+    stationaryType: { type: bilingualSchema },
+    stationaryColor: { type: String },
+    stationaryPackSize: { type: String },
+    stationaryMaterial: { type: bilingualSchema },
+    // Image
     image: { type: String },
-    imageDeleteUrl: { type: String },
-    isPublished: { type: Boolean, default: true },
-    sortOrder: { type: Number, default: 0 },
-}, { timestamps: true });
+    imageKey: { type: String },
+}, { timestamps: true, strict: false });
+// ❌ REMOVED: pre("save") hook — it was causing slug to be silently dropped
+// All slug logic is now handled in the controller only
 exports.default = mongoose_1.default.model("Product", ProductSchema);

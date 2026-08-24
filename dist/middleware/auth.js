@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorize = exports.protect = exports.authenticateToken = exports.authenticate = void 0;
 const firebase_1 = require("../config/firebase");
-const User_1 = __importDefault(require("../models/User")); // Import IUser here!
+const User_1 = __importDefault(require("../models/User"));
 const authenticate = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -21,16 +21,18 @@ const authenticate = async (req, res, next) => {
             const isRegisterRoute = req.originalUrl.includes("/register");
             if (!user && !isRegisterRoute) {
                 console.log(`[AUTH] Auto-provisioning user for UID: ${uid}`);
-                const fullName = decodedToken.name || "User";
-                const nameParts = fullName.split(" ");
+                // ✅ FIXED: .trim() and .filter(Boolean) prevent empty strings from trailing spaces
+                const fullName = (decodedToken.name || "").trim();
+                const nameParts = fullName.split(/\s+/).filter(Boolean);
                 const firstName = nameParts[0] || "User";
-                const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "User";
+                // ✅ FIXED: Safely assigns undefined if no last name exists (Schema will use default "")
+                const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
                 const createdUser = await User_1.default.create({
                     uid: uid,
-                    email: decodedToken.email || "",
+                    email: decodedToken.email || undefined, // ✅ Safer fallback
                     firstName: firstName,
                     lastName: lastName,
-                    phoneNumber: decodedToken.phoneNumber || "",
+                    phoneNumber: decodedToken.phoneNumber || undefined, // ✅ Safer fallback
                     role: "student",
                 });
                 user = createdUser.toObject();
@@ -57,7 +59,9 @@ const authorize = (...roles) => (req, res, next) => {
         return;
     }
     if (!roles.includes(req.user.role)) {
-        res.status(403).json({ message: `Forbidden: Role '${req.user.role}' is not allowed` });
+        res
+            .status(403)
+            .json({ message: `Forbidden: Role '${req.user.role}' is not allowed` });
         return;
     }
     next();

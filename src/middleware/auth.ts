@@ -1,11 +1,10 @@
 // src/middleware/auth.ts
 import type { Request, Response, NextFunction } from "express";
 import { auth } from "../config/firebase";
-import User, { IUser } from "../models/User"; // Import IUser here!
+import User, { IUser } from "../models/User";
 
-// Define AuthRequest here, using IUser so it automatically gets "instructor"
 export interface AuthRequest extends Request {
-  user?: IUser; 
+  user?: IUser;
 }
 
 export const authenticate = async (
@@ -34,21 +33,25 @@ export const authenticate = async (
       if (!user && !isRegisterRoute) {
         console.log(`[AUTH] Auto-provisioning user for UID: ${uid}`);
 
-        const fullName = decodedToken.name || "User";
-        const nameParts = fullName.split(" ");
+        // ✅ FIXED: .trim() and .filter(Boolean) prevent empty strings from trailing spaces
+        const fullName = (decodedToken.name || "").trim();
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+
         const firstName = nameParts[0] || "User";
-        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "User";
+        // ✅ FIXED: Safely assigns undefined if no last name exists (Schema will use default "")
+        const lastName =
+          nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
 
         const createdUser = await User.create({
           uid: uid,
-          email: decodedToken.email || "",
+          email: decodedToken.email || undefined, // ✅ Safer fallback
           firstName: firstName,
           lastName: lastName,
-          phoneNumber: decodedToken.phoneNumber || "",
+          phoneNumber: decodedToken.phoneNumber || undefined, // ✅ Safer fallback
           role: "student",
         });
 
-        user = createdUser.toObject() as IUser; 
+        user = createdUser.toObject() as IUser;
       }
 
       req.user = user || undefined;
@@ -75,7 +78,9 @@ export const authorize =
       return;
     }
     if (!roles.includes(req.user.role)) {
-      res.status(403).json({ message: `Forbidden: Role '${req.user.role}' is not allowed` });
+      res
+        .status(403)
+        .json({ message: `Forbidden: Role '${req.user.role}' is not allowed` });
       return;
     }
     next();

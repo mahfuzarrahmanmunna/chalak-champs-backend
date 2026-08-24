@@ -1,22 +1,18 @@
 "use strict";
-// src/routes/courses.ts
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const CourseController_1 = require("../controllers/CourseController");
-const moduleController_1 = require("../controllers/moduleController");
 const auth_1 = require("../middleware/auth");
 const multer_1 = __importDefault(require("multer"));
+const moduleController_1 = require("../controllers/moduleController");
 const lessonController_1 = require("../controllers/lessonController");
-// import { uploadToR2 } from "../middleware/upload"; // ✅ Removed unused import
 const storage = multer_1.default.memoryStorage();
-const upload = (0, multer_1.default)({
-    storage,
-    limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
-});
-// ✅ FIX: Custom middleware to prevent "Unexpected field" error
+const upload = (0, multer_1.default)({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
+// Groups files by fieldname so we can handle thumbnail, video,
+// instructorImages (plural), mediaFiles etc.
 const uploadAny = (req, res, next) => {
     upload.any()(req, res, (err) => {
         if (err)
@@ -35,20 +31,18 @@ const uploadAny = (req, res, next) => {
 };
 const router = express_1.default.Router();
 // =============================================
-// PUBLIC ROUTES (No auth required)
+// PUBLIC ROUTES
 // =============================================
 router.get("/", CourseController_1.getAllCourses);
+router.get("/admin/all", auth_1.protect, (0, auth_1.authorize)("admin"), CourseController_1.getAdminCourses);
 router.get("/slug/:slug", CourseController_1.getCourseBySlug);
 router.get("/:id", CourseController_1.getCourseById);
 // =============================================
-// PROTECTED ROUTES (Auth required)
+// PROTECTED ROUTES
 // =============================================
 router.use(auth_1.protect);
-// --- Instructor Routes ---
 router.get("/instructor/my-courses", CourseController_1.getInstructorCourses);
-// --- Course CRUD ---
 router.post("/", (0, auth_1.authorize)("instructor", "admin"), uploadAny, CourseController_1.createCourse);
-// ✅ FIX: Kept ONLY THIS ONE update route. The duplicate at the bottom has been deleted.
 router.put("/:id", (0, auth_1.authorize)("instructor", "admin"), uploadAny, CourseController_1.updateCourse);
 router.delete("/:id", (0, auth_1.authorize)("instructor", "admin"), CourseController_1.deleteCourse);
 // =============================================

@@ -33,8 +33,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadCourseThumbnail = exports.uploadCourseMedia = exports.uploadToR2 = exports.uploadSingleImage = void 0;
+exports.uploadModuleMedia = exports.uploadVideoThumbnails = exports.uploadCourseThumbnail = exports.uploadCourseMedia = exports.uploadToR2 = exports.uploadSingleImage = void 0;
 exports.getCourseFiles = getCourseFiles;
+exports.getModuleFiles = getModuleFiles;
 // src/middleware/upload.ts
 /// <reference path="../types/express.d.ts" />
 const multer_1 = __importStar(require("multer"));
@@ -86,9 +87,7 @@ const uploadToR2 = async (req, res, next) => {
     catch (error) {
         if (error instanceof multer_1.MulterError) {
             if (error.code === "LIMIT_FILE_SIZE") {
-                res
-                    .status(400)
-                    .json({ success: false, message: "Image too large" });
+                res.status(400).json({ success: false, message: "Image too large" });
                 return;
             }
             res.status(400).json({ success: false, message: error.message });
@@ -159,5 +158,53 @@ function getCourseFiles(req) {
         video: files.video,
         instructorImage: files.instructorImage,
         mediaFiles: files.mediaFiles,
+    };
+}
+exports.uploadVideoThumbnails = (0, multer_1.default)({
+    storage,
+    fileFilter: imageFileFilter, // Reuses your existing strict image filter
+    limits: {
+        fileSize: r2_1.maxImageSizeBytes, // Reuses your 5MB limit from config
+        files: 20, // Allow up to 20 thumbnails at once
+    },
+}).array("thumbnails"); // Expects frontend to use fd.append("thumbnails", file)
+const moduleFileFilter = (req, file, cb) => {
+    if (!file?.mimetype) {
+        cb(new Error("Invalid file upload"));
+        return;
+    }
+    const allowedImageTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+    ];
+    const allowedVideoTypes = ["video/mp4", "video/webm", "video/quicktime"];
+    const allowed = [...allowedImageTypes, ...allowedVideoTypes];
+    if (!allowed.includes(file.mimetype)) {
+        cb(new Error("Unsupported file type. Allowed: jpg, png, webp, gif, mp4, webm"));
+        return;
+    }
+    cb(null, true);
+};
+const uploadModule = (0, multer_1.default)({
+    storage, // memoryStorage from top of file
+    fileFilter: moduleFileFilter,
+    limits: {
+        fileSize: 100 * 1024 * 1024, // 100MB to support video uploads
+        files: 2, // thumbnail + video
+    },
+});
+exports.uploadModuleMedia = uploadModule.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+]);
+function getModuleFiles(req) {
+    const files = req.files;
+    if (!files)
+        return {};
+    return {
+        thumbnail: files.thumbnail,
+        video: files.video,
     };
 }

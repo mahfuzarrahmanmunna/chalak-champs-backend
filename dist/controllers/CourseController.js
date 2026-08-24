@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteCourse = exports.updateCourse = exports.getInstructorCourses = exports.getCourseBySlug = exports.getCourseById = exports.getAllCourses = exports.createCourse = void 0;
+exports.deleteCourse = exports.updateCourse = exports.getInstructorCourses = exports.getCourseBySlug = exports.getCourseById = exports.getAdminCourses = exports.getAllCourses = exports.createCourse = void 0;
 const errorHandler_1 = require("../middleware/errorHandler");
 const r2_service_1 = require("../services/r2.service");
 const Course_1 = __importDefault(require("../models/Course"));
@@ -29,8 +29,6 @@ const parseJSON = (value) => {
 };
 // ====================================================================
 // ✅ FIX: Deep Merge Utility
-// This prevents nested object properties (like instructor.title, payment.description)
-// from being wiped out when the parent object is spread during an update.
 // ====================================================================
 function deepMerge(target, source) {
     const output = { ...target };
@@ -45,11 +43,9 @@ function deepMerge(target, source) {
             targetVal !== undefined &&
             typeof targetVal === "object" &&
             !Array.isArray(targetVal)) {
-            // Both are objects - recursively merge them
             output[key] = deepMerge(targetVal, sourceVal);
         }
         else if (sourceVal !== undefined) {
-            // Primitive or array - replace entirely (but don't overwrite with undefined)
             output[key] = sourceVal;
         }
     }
@@ -75,14 +71,44 @@ const deleteFromR2 = async (url) => {
         console.error("Failed to delete from R2:", err);
     }
 };
-// --- CONTROLLERS ---
+// ====================================================================
+// ✅ HELPER: Process instructor images (used in both create & update)
+// Maps uploaded R2 URLs to instructors marked with isNewImage
+// ====================================================================
+function mapInstructorImages(instructors, uploadedUrls) {
+    if (!uploadedUrls.length || !instructors?.length)
+        return instructors || [];
+    let urlIndex = 0;
+    return instructors.map((inst) => {
+        if (inst.isNewImage &&
+            inst.tempImageIndex !== undefined &&
+            urlIndex < uploadedUrls.length) {
+            const url = uploadedUrls[urlIndex++];
+            return {
+                ...inst,
+                image: url,
+                isNewImage: undefined,
+                tempImageIndex: undefined,
+            };
+        }
+        // Clean up flags even if no new image
+        return {
+            ...inst,
+            isNewImage: undefined,
+            tempImageIndex: undefined,
+        };
+    });
+}
+// ====================================================================
 // 1. CREATE COURSE
+// ====================================================================
 exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
     const { user } = req;
     const files = req.files;
     console.log("=== COURSE CREATION START ===");
     console.log("Files received:", files ? Object.keys(files) : "NONE");
     console.log("Media files count:", files?.mediaFiles?.length || 0);
+    console.log("Instructor images count:", files?.instructorImages?.length || 0);
     const uploadedKeys = [];
     try {
         // 1. Upload Thumbnail to R2
@@ -103,16 +129,29 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
             uploadedKeys.push(result.key);
             console.log("Video uploaded:", videoUrl);
         }
-        // 3. Upload Instructor Image to R2 (if provided)
-        let instructorImageUrl = "";
-        if (files?.instructorImage?.[0]) {
-            console.log("Uploading instructor image:", files.instructorImage[0].originalname);
-            const result = await uploadToR2(files.instructorImage[0], "courses/instructors");
-            instructorImageUrl = result.url;
-            uploadedKeys.push(result.key);
-            console.log("Instructor image uploaded:", instructorImageUrl);
+        // ====================================================================
+        // ✅ NEW: Upload MULTIPLE Instructor Images to R2
+        // ====================================================================
+        const instructorImageUrls = [];
+        if (files?.instructorImages?.length) {
+            console.log(`\n=== UPLOADING ${files.instructorImages.length} INSTRUCTOR IMAGES ===`);
+            for (let i = 0; i < files.instructorImages.length; i++) {
+                const file = files.instructorImages[i];
+                console.log(`[${i + 1}/${files.instructorImages.length}] Uploading: ${file.originalname}`);
+                try {
+                    const result = await uploadToR2(file, "courses/instructors");
+                    instructorImageUrls.push(result.url);
+                    uploadedKeys.push(result.key);
+                    console.log(`[${i + 1}/${files.instructorImages.length}] ✓ Uploaded: ${result.url}`);
+                }
+                catch (uploadError) {
+                    console.error(`[${i + 1}/${files.instructorImages.length}] ✗ Failed:`, uploadError);
+                    throw uploadError;
+                }
+            }
+            console.log(`=== ALL ${instructorImageUrls.length} INSTRUCTOR IMAGES UPLOADED ===\n`);
         }
-        // 4. Upload Media Files to R2
+        // 3. Upload Media Files to R2
         const mediaFileUrls = [];
         if (files?.mediaFiles?.length) {
             console.log(`\n=== UPLOADING ${files.mediaFiles.length} MEDIA FILES ===`);
@@ -121,7 +160,9 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                 console.log(`[${i + 1}/${files.mediaFiles.length}] Uploading: ${file.originalname} (${file.mimetype}, ${Math.round(file.size / 1024)}KB)`);
                 try {
                     const result = await uploadToR2(file, "courses/media");
-                    const mediaType = file.mimetype.startsWith("video") ? "video" : "image";
+                    const mediaType = file.mimetype.startsWith("video")
+                        ? "video"
+                        : "image";
                     mediaFileUrls.push({
                         url: result.url,
                         type: mediaType,
@@ -137,20 +178,19 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
             }
             console.log(`=== ALL ${mediaFileUrls.length} MEDIA FILES UPLOADED ===\n`);
         }
-        else {
-            console.log("No media files to upload");
-        }
-        // 5. Parse JSON Data from FormData
+        // 4. Parse JSON Data from FormData
         let incoming = { ...req.body };
         let contentData = parseJSON(incoming.content) || {};
-        // ✅ FIX: Only use fallback if the frontend sent an empty content object (legacy support)
+        // ✅ Legacy fallback
         if (Object.keys(contentData).length === 0) {
             contentData = {
                 hero: {
                     title: parseJSON(incoming.title) || { en: "", bn: "" },
                     subtitle: parseJSON(incoming.heroSubtitle) || { en: "", bn: "" },
                 },
-                quickInfo: parseJSON(incoming.quickInfo) || { items: { en: [], bn: [] } },
+                quickInfo: parseJSON(incoming.quickInfo) || {
+                    items: { en: [], bn: [] },
+                },
                 levels: parseJSON(incoming.levels) || {},
                 whoIsThisFor: parseJSON(incoming.whoIsThisFor) || {},
                 features: parseJSON(incoming.features) || { cards: [] },
@@ -164,10 +204,22 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                 },
             };
         }
-        if (instructorImageUrl) {
-            if (!contentData.instructor)
-                contentData.instructor = {};
-            contentData.instructor.image = instructorImageUrl;
+        // ====================================================================
+        // ✅ NEW: Map uploaded instructor image URLs to instructors
+        // ====================================================================
+        if (instructorImageUrls.length > 0 && contentData.instructors) {
+            console.log("\n=== MAPPING INSTRUCTOR IMAGE URLS ===");
+            contentData.instructors = mapInstructorImages(contentData.instructors, instructorImageUrls);
+            console.log(`Mapped ${instructorImageUrls.length} instructor images`);
+            console.log("=== MAPPING COMPLETE ===\n");
+        }
+        else if (contentData.instructors) {
+            // Clean up flags even if no new uploads
+            contentData.instructors = contentData.instructors.map((inst) => ({
+                ...inst,
+                isNewImage: undefined,
+                tempImageIndex: undefined,
+            }));
         }
         // Map uploaded URLs to media assets
         if (mediaFileUrls.length > 0) {
@@ -178,7 +230,7 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
             let urlIndex = 0;
             contentData.mediaAssets = contentData.mediaAssets.map((asset, i) => {
                 const isNewUpload = asset.isNew === true ||
-                    (asset.src && asset.src.startsWith('blob:'));
+                    (asset.src && asset.src.startsWith("blob:"));
                 if (isNewUpload && urlIndex < mediaFileUrls.length) {
                     const uploaded = mediaFileUrls[urlIndex++];
                     console.log(`Asset #${i}: Replaced blob URL -> ${uploaded.url} (type: ${uploaded.type})`);
@@ -201,29 +253,34 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
             console.log(`Final mediaAssets count: ${contentData.mediaAssets.length}`);
             console.log("=== MAPPING COMPLETE ===\n");
         }
-        // 6. Parse Prices
-        const rawPrice = incoming.price ?? incoming.price === 0 ? incoming.price : 0;
+        // 5. Parse Prices
+        const rawPrice = (incoming.price ?? incoming.price === 0) ? incoming.price : 0;
         const parsedPrice = parseFloat(String(rawPrice));
         if (Number.isNaN(parsedPrice)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid price provided"
-            });
+            return res
+                .status(400)
+                .json({ success: false, message: "Invalid price provided" });
         }
         const parsedOriginalPrice = incoming.originalPrice
             ? parseFloat(String(incoming.originalPrice))
             : undefined;
-        // 7. Get title for validation
+        // 6. Get title for validation
         const title = parseJSON(incoming.title) ||
             contentData.hero?.title ||
             contentData.breadcrumb;
         if (!title?.en) {
             return res.status(400).json({
                 success: false,
-                message: "Course title is required (title.en)"
+                message: "Course title is required (title.en)",
             });
         }
-        // 8. Create Course
+        // ====================================================================
+        // ✅ NEW: Build instructorName from first instructor in the list
+        // ====================================================================
+        const firstInstructorName = contentData.instructors?.[0]?.name ||
+            contentData.instructor?.name ||
+            "";
+        // 7. Create Course
         const courseData = {
             slug: incoming.slug || "",
             title: title,
@@ -241,7 +298,7 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
             features: contentData.features || [],
             faqs: contentData.faq || [],
             instructor: user?._id || incoming.instructor,
-            instructorName: incoming.instructorName || contentData.instructor?.name || "",
+            instructorName: incoming.instructorName || firstInstructorName,
             isPublished: incoming.isPublished === "true" || incoming.isPublished === true,
             publishedAt: new Date(),
         };
@@ -249,6 +306,7 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
         const course = await Course_1.default.create(courseData);
         console.log("=== COURSE CREATED SUCCESSFULLY ===");
         console.log("Course ID:", course._id);
+        console.log("Instructors count:", course.content?.instructors?.length || 0);
         console.log("Media assets saved:", course.content?.mediaAssets?.length || 0);
         res.status(201).json({
             success: true,
@@ -272,25 +330,25 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
         console.error("=== CLEANUP COMPLETE ===\n");
         if (error.code === 11000) {
             const field = Object.keys(error.keyValue)[0];
-            return res.status(400).json({
-                success: false,
-                message: `${field} already exists`
-            });
+            return res
+                .status(400)
+                .json({ success: false, message: `${field} already exists` });
         }
         if (error.name === "ValidationError") {
             const messages = Object.values(error.errors).map((err) => err.message);
-            return res.status(400).json({
-                success: false,
-                message: messages.join(", ")
-            });
+            return res
+                .status(400)
+                .json({ success: false, message: messages.join(", ") });
         }
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to create course"
+            message: error.message || "Failed to create course",
         });
     }
 });
-// 2. GET ALL COURSES (Public) - FIXED TO RETURN ALL DATA
+// ====================================================================
+// 2. GET ALL COURSES (Public)
+// ====================================================================
 exports.getAllCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
     const { category, search, published, limit, page } = req.query;
     const filter = {};
@@ -298,7 +356,12 @@ exports.getAllCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
         filter.category = category;
     }
     if (published !== undefined) {
-        filter.isPublished = published === "true";
+        if (published === "all") {
+            // return both
+        }
+        else {
+            filter.isPublished = published === "true";
+        }
     }
     else {
         filter.isPublished = true;
@@ -311,8 +374,8 @@ exports.getAllCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
             { instructorName: { $regex: search, $options: "i" } },
         ];
     }
-    // FIXED: Removed .select() so it returns ALL data including content, mediaAssets, hero, etc.
     const courses = await Course_1.default.find(filter)
+        .populate("instructor", "firstName lastName email avatar")
         .sort("-createdAt")
         .limit(Number(limit) || 50)
         .skip(((Number(page) || 1) - 1) * (Number(limit) || 50));
@@ -326,71 +389,144 @@ exports.getAllCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
         data: courses,
     });
 });
-// 3. GET SINGLE COURSE BY ID (Public)
+// ====================================================================
+// 3. GET ADMIN COURSES
+// ====================================================================
+exports.getAdminCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
+    const { category, search, published, limit, page } = req.query;
+    const filter = {};
+    if (category && category !== "all") {
+        filter.category = category;
+    }
+    if (published !== undefined) {
+        if (published === "all") {
+            // return everything
+        }
+        else {
+            filter.isPublished = published === "true";
+        }
+    }
+    if (search) {
+        filter.$or = [
+            { "title.en": { $regex: search, $options: "i" } },
+            { "title.bn": { $regex: search, $options: "i" } },
+            { slug: { $regex: search, $options: "i" } },
+            { instructorName: { $regex: search, $options: "i" } },
+        ];
+    }
+    const limitNum = Number(limit) || 10;
+    const pageNum = Number(page) || 1;
+    const courses = await Course_1.default.find(filter)
+        .populate("instructor", "firstName lastName email avatar")
+        .sort("-createdAt")
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum);
+    const total = await Course_1.default.countDocuments(filter);
+    res.status(200).json({
+        success: true,
+        count: courses.length,
+        total,
+        page: pageNum,
+        totalPages: Math.ceil(total / limitNum),
+        data: courses,
+    });
+});
+// ====================================================================
+// 4. GET SINGLE COURSE BY ID
+// ====================================================================
 exports.getCourseById = (0, errorHandler_1.catchAsync)(async (req, res) => {
     const course = await Course_1.default.findById(req.params.id).populate("instructor", "name email");
     if (!course) {
-        return res.status(404).json({
-            success: false,
-            message: "Course not found"
-        });
+        return res
+            .status(404)
+            .json({ success: false, message: "Course not found" });
     }
-    res.status(200).json({
-        success: true,
-        data: course,
-    });
+    res.status(200).json({ success: true, data: course });
 });
-// 4. GET SINGLE COURSE BY SLUG (Public)
+// ====================================================================
+// 5. GET SINGLE COURSE BY SLUG
+// ====================================================================
 exports.getCourseBySlug = (0, errorHandler_1.catchAsync)(async (req, res) => {
     const course = await Course_1.default.findOne({ slug: req.params.slug }).populate("instructor", "name email");
     if (!course) {
-        return res.status(404).json({
-            success: false,
-            message: "Course not found"
-        });
+        return res
+            .status(404)
+            .json({ success: false, message: "Course not found" });
     }
-    res.status(200).json({
-        success: true,
-        data: course,
-    });
+    res.status(200).json({ success: true, data: course });
 });
-// 5. GET INSTRUCTOR COURSES (Protected)
+// ====================================================================
+// 6. GET INSTRUCTOR COURSES
+// ====================================================================
 exports.getInstructorCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
-    const courses = await Course_1.default.find({ instructor: req.user?._id })
-        .sort("-createdAt");
+    const courses = await Course_1.default.find({ instructor: req.user?._id }).sort("-createdAt");
     res.status(200).json({
         success: true,
         count: courses.length,
         data: courses,
     });
 });
-// 6. UPDATE COURSE
+// ====================================================================
+// 7. UPDATE COURSE
+// ====================================================================
 exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
     const { id } = req.params;
     const files = req.files;
-    // Fix primitive string fields (existing code)
+    // Fix primitive string fields
     const rawCourse = await Course_1.default.findById(id).lean();
     if (rawCourse) {
         const fixes = {};
-        if (typeof rawCourse.duration === 'string')
-            fixes.duration = { en: rawCourse.duration, bn: rawCourse.duration };
-        if (typeof rawCourse.title === 'string')
+        if (typeof rawCourse.duration === "string")
+            fixes.duration = {
+                en: rawCourse.duration,
+                bn: rawCourse.duration,
+            };
+        if (typeof rawCourse.title === "string")
             fixes.title = { en: rawCourse.title, bn: rawCourse.title };
-        if (typeof rawCourse.heroSubtitle === 'string')
-            fixes.heroSubtitle = { en: rawCourse.heroSubtitle, bn: rawCourse.heroSubtitle };
-        if (typeof rawCourse.description === 'string')
-            fixes.description = { en: rawCourse.description, bn: rawCourse.description };
+        if (typeof rawCourse.heroSubtitle === "string")
+            fixes.heroSubtitle = {
+                en: rawCourse.heroSubtitle,
+                bn: rawCourse.heroSubtitle,
+            };
+        if (typeof rawCourse.description === "string")
+            fixes.description = {
+                en: rawCourse.description,
+                bn: rawCourse.description,
+            };
         if (Object.keys(fixes).length > 0) {
             await Course_1.default.updateOne({ _id: id }, { $set: fixes });
+        }
+        // ====================================================================
+        // ✅ AUTO-MIGRATE: Convert old single instructor to instructors array
+        // ====================================================================
+        if (rawCourse.content?.instructor && !rawCourse.content?.instructors) {
+            console.log("=== AUTO-MIGRATING: content.instructor → content.instructors ===");
+            await Course_1.default.updateOne({ _id: id }, {
+                $set: {
+                    "content.instructors": [rawCourse.content.instructor],
+                    "content.instructorsTitle": rawCourse.content.instructor
+                        ?.title || {
+                        en: "Course Instructors",
+                        bn: "কোর্স ইন্সট্রাক্টর",
+                    },
+                },
+            });
         }
     }
     const course = await Course_1.default.findById(id);
     if (!course) {
-        return res.status(404).json({ success: false, message: "Course not found" });
+        return res
+            .status(404)
+            .json({ success: false, message: "Course not found" });
     }
     if (course.instructor?.toString() !== req.user?._id?.toString() &&
         req.user?.role !== "admin") {
-        return res.status(403).json({ success: false, message: "Not authorized to update this course" });
+        return res
+            .status(403)
+            .json({
+            success: false,
+            message: "Not authorized to update this course",
+        });
     }
     const uploadedKeys = [];
     const oldUrlsToDelete = [];
@@ -411,19 +547,43 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                 oldUrlsToDelete.push(course.videoUrl);
             course.videoUrl = result.url;
         }
-        // ✅ FIX: Handle instructor image upload ONCE (previously uploaded twice)
-        let newInstructorImageUrl = "";
-        if (files?.instructorImage?.[0]) {
-            const result = await uploadToR2(files.instructorImage[0], "courses/instructors");
-            newInstructorImageUrl = result.url;
-            uploadedKeys.push(result.key);
-            const oldInstructorImage = course.content?.instructor?.image;
-            if (oldInstructorImage)
-                oldUrlsToDelete.push(oldInstructorImage);
+        // ====================================================================
+        // ✅ NEW: Upload MULTIPLE Instructor Images
+        // ====================================================================
+        const instructorImageUrls = [];
+        if (files?.instructorImages?.length) {
+            console.log(`\n=== UPLOADING ${files.instructorImages.length} INSTRUCTOR IMAGES (UPDATE) ===`);
+            for (let i = 0; i < files.instructorImages.length; i++) {
+                const file = files.instructorImages[i];
+                try {
+                    const result = await uploadToR2(file, "courses/instructors");
+                    instructorImageUrls.push(result.url);
+                    uploadedKeys.push(result.key);
+                    console.log(`[${i + 1}] ✓ Instructor image uploaded: ${result.url}`);
+                }
+                catch (uploadError) {
+                    console.error(`[${i + 1}] ✗ Failed:`, uploadError);
+                    throw uploadError;
+                }
+            }
+            console.log("=== INSTRUCTOR IMAGES UPLOAD COMPLETE ===\n");
         }
-        // ============================================
-        // ✅ FIX #1: Parse content FIRST
-        // ============================================
+        // ====================================================================
+        // ✅ Collect OLD instructor image URLs BEFORE merge (for cleanup)
+        // ====================================================================
+        const oldInstructorImages = [];
+        const oldContent = course.content;
+        if (oldContent?.instructors) {
+            for (const inst of oldContent.instructors) {
+                if (inst.image)
+                    oldInstructorImages.push(inst.image);
+            }
+        }
+        // Also check legacy single instructor
+        if (oldContent?.instructor?.image) {
+            oldInstructorImages.push(oldContent.instructor.image);
+        }
+        // Parse content FIRST
         const parsedContent = parseJSON(req.body.content) || {};
         // Handle media file uploads and map URLs
         if (files?.mediaFiles?.length) {
@@ -432,15 +592,15 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                 const result = await uploadToR2(file, "courses/media");
                 mediaFileUrls.push({
                     url: result.url,
-                    type: file.mimetype.startsWith("video") ? "video" : "image"
+                    type: file.mimetype.startsWith("video") ? "video" : "image",
                 });
                 uploadedKeys.push(result.key);
             }
-            // Map uploaded URLs to mediaAssets
             if (parsedContent.mediaAssets) {
                 let urlIndex = 0;
                 parsedContent.mediaAssets = parsedContent.mediaAssets.map((asset) => {
-                    if ((asset.isNew || asset.src?.startsWith('blob:')) && mediaFileUrls[urlIndex]) {
+                    if ((asset.isNew || asset.src?.startsWith("blob:")) &&
+                        mediaFileUrls[urlIndex]) {
                         const uploaded = mediaFileUrls[urlIndex++];
                         return {
                             type: uploaded.type,
@@ -450,7 +610,6 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                     }
                     return asset;
                 });
-                // Add any remaining uploaded files as new assets
                 while (urlIndex < mediaFileUrls.length) {
                     const uploaded = mediaFileUrls[urlIndex++];
                     parsedContent.mediaAssets.push({
@@ -460,22 +619,27 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                 }
             }
         }
-        // Apply the newly uploaded instructor image URL to parsed content
-        if (newInstructorImageUrl) {
-            if (!parsedContent.instructor)
-                parsedContent.instructor = {};
-            parsedContent.instructor.image = newInstructorImageUrl;
+        // ====================================================================
+        // ✅ Map uploaded instructor image URLs to instructors in parsed content
+        // ====================================================================
+        if (instructorImageUrls.length > 0 && parsedContent.instructors) {
+            console.log("=== MAPPING INSTRUCTOR IMAGE URLS (UPDATE) ===");
+            parsedContent.instructors = mapInstructorImages(parsedContent.instructors, instructorImageUrls);
+            console.log("=== MAPPING COMPLETE ===\n");
         }
-        // ============================================
-        // ✅ FIX #2: Use DEEP MERGE instead of shallow spread
-        // If parsedContent.instructor only has { name: "X" }, deep merge ensures
-        // existing { title: "Y", designation: "Z" } are NOT wiped out.
-        // ============================================
-        const existingContent = course.content ? JSON.parse(JSON.stringify(course.content)) : {};
+        else if (parsedContent.instructors) {
+            parsedContent.instructors = parsedContent.instructors.map((inst) => ({
+                ...inst,
+                isNewImage: undefined,
+                tempImageIndex: undefined,
+            }));
+        }
+        // Deep merge
+        const existingContent = course.content
+            ? JSON.parse(JSON.stringify(course.content))
+            : {};
         course.content = deepMerge(existingContent, parsedContent);
-        // ============================================
-        // ✅ FIX #3: Update top-level fields from content
-        // ============================================
+        // Update top-level fields from content
         if (course.content) {
             const c = course.content;
             if (c.hero?.title)
@@ -492,6 +656,14 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                 course.features = c.features;
             if (c.faq)
                 course.faqs = c.faq;
+        }
+        // ====================================================================
+        // ✅ Update instructorName from first instructor in the list
+        // ====================================================================
+        const updatedInstructors = course.content?.instructors;
+        if (updatedInstructors?.length > 0) {
+            course.instructorName =
+                updatedInstructors[0].name || course.instructorName;
         }
         // Update simple fields
         if (req.body.slug !== undefined && req.body.slug !== course.slug) {
@@ -518,18 +690,16 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
         if (req.body.instructorName) {
             course.instructorName = req.body.instructorName;
         }
-        // Update publish status
         if (req.body.isPublished !== undefined) {
             const isPublished = req.body.isPublished === "true" || req.body.isPublished === true;
             course.isPublished = isPublished;
-            course.publishedAt = isPublished ? (course.publishedAt || new Date()) : undefined;
+            course.publishedAt = isPublished
+                ? course.publishedAt || new Date()
+                : undefined;
         }
-        // ============================================
-        // ✅ FIX #4: Mark content as modified (safety net for Mongoose)
-        // ============================================
-        course.markModified('content');
+        course.markModified("content");
         console.log("=== SAVING COURSE UPDATE ===");
-        console.log("Content keys:", Object.keys(course.content || {}));
+        console.log("Instructors count:", course.content?.instructors?.length || 0);
         console.log("Media assets:", course.content?.mediaAssets?.length || 0);
         await course.save();
         console.log("=== COURSE UPDATED SUCCESSFULLY ===");
@@ -537,74 +707,96 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
         for (const url of oldUrlsToDelete) {
             await deleteFromR2(url);
         }
+        // ====================================================================
+        // ✅ Delete removed instructor images (ones that are no longer in the list)
+        // ====================================================================
+        const newInstructorImages = [];
+        const savedContent = course.content;
+        if (savedContent?.instructors) {
+            for (const inst of savedContent.instructors) {
+                if (inst.image)
+                    newInstructorImages.push(inst.image);
+            }
+        }
+        const instrImagesToDelete = oldInstructorImages.filter((url) => !newInstructorImages.includes(url));
+        if (instrImagesToDelete.length > 0) {
+            console.log(`Deleting ${instrImagesToDelete.length} removed instructor images...`);
+            for (const url of instrImagesToDelete) {
+                await deleteFromR2(url);
+            }
+        }
         res.status(200).json({
             success: true,
             data: course,
-            message: "Course updated successfully"
+            message: "Course updated successfully",
         });
     }
     catch (error) {
         console.error("Update error:", error);
-        // Cleanup uploaded files on error
         for (const key of uploadedKeys) {
             await r2_service_1.R2Service.deleteFile(key).catch(console.error);
         }
         if (error.code === 11000) {
             const field = Object.keys(error.keyValue)[0];
-            return res.status(400).json({
-                success: false,
-                message: `${field} already exists`
-            });
+            return res
+                .status(400)
+                .json({ success: false, message: `${field} already exists` });
         }
         if (error.name === "ValidationError") {
             const messages = Object.values(error.errors).map((err) => err.message);
-            return res.status(400).json({
-                success: false,
-                message: messages.join(", ")
-            });
+            return res
+                .status(400)
+                .json({ success: false, message: messages.join(", ") });
         }
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to update course"
+            message: error.message || "Failed to update course",
         });
     }
 });
-// 7. DELETE COURSE
+// ====================================================================
+// 8. DELETE COURSE
+// ====================================================================
 exports.deleteCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
     const { id } = req.params;
     const course = await Course_1.default.findById(id);
     if (!course) {
-        return res.status(404).json({
-            success: false,
-            message: "Course not found"
-        });
+        return res
+            .status(404)
+            .json({ success: false, message: "Course not found" });
     }
     if (course.instructor?.toString() !== req.user?._id?.toString() &&
         req.user?.role !== "admin") {
-        return res.status(403).json({
+        return res
+            .status(403)
+            .json({
             success: false,
-            message: "Not authorized to delete this course"
+            message: "Not authorized to delete this course",
         });
     }
     try {
-        if (course.thumbnail) {
+        if (course.thumbnail)
             await deleteFromR2(course.thumbnail);
-        }
-        if (course.videoUrl) {
+        if (course.videoUrl)
             await deleteFromR2(course.videoUrl);
-        }
         const content = course.content;
+        // ✅ Delete all instructor images (plural)
+        if (content?.instructors?.length) {
+            for (const inst of content.instructors) {
+                if (inst.image)
+                    await deleteFromR2(inst.image);
+            }
+        }
+        // Also handle legacy single instructor
         if (content?.instructor?.image) {
             await deleteFromR2(content.instructor.image);
         }
         if (content?.mediaAssets?.length) {
             for (const asset of content.mediaAssets) {
-                if (asset.src) {
+                if (asset.src)
                     await deleteFromR2(asset.src);
-                }
-                if (asset.poster) {
+                if (asset.poster)
                     await deleteFromR2(asset.poster);
-                }
             }
         }
         await course.deleteOne();
@@ -616,7 +808,7 @@ exports.deleteCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
     catch (error) {
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to delete course"
+            message: error.message || "Failed to delete course",
         });
     }
 });

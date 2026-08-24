@@ -12,7 +12,8 @@ const uploadToR2 = async (file, folder) => {
         throw new Error(`Empty file buffer for ${file.originalname}`);
     }
     const subFolder = "images";
-    return r2_service_1.R2Service.uploadFile(file.buffer, file.mimetype, `${folder}/${subFolder}`);
+    const result = await r2_service_1.R2Service.uploadFile(file.buffer, file.mimetype, `${folder}/${subFolder}`);
+    return result.url;
 };
 const deleteFromR2 = async (url) => {
     if (!url)
@@ -55,24 +56,28 @@ const getVideoGallery = async (req, res) => {
     }
 };
 exports.getVideoGallery = getVideoGallery;
-// ✅ FIX: Reverted to standard Request, and safely cast files inside
 const upsertVideoGallery = async (req, res) => {
     try {
+        // 1. Parse incoming payload
         const parsedData = JSON.parse(req.body.data);
-        const { title, subtitle, videos } = parsedData;
+        const { title, subtitle, videos: incomingVideos } = parsedData;
         // Safely cast the files array since upload.array() ensures it's an array of Multer files
         const files = req.files || [];
+        // 2. Fetch existing gallery to check for orphaned R2 images
+        const existingGallery = await VideoGallery_1.default.findOne();
+        const existingThumbnails = existingGallery?.videos
+            ?.map((v) => v.thumbnail)
+            .filter((url) => url && !url.startsWith("data:")) || [];
+        // 3. Process uploads and map placeholders to real R2 URLs
         let fileIndex = 0;
-        // ✅ FIX: Added 'async' to the map callback to allow 'await' inside
-        const processedVideos = await Promise.all(videos.map(async (v) => {
-            let thumbnailUrl = v.thumbnail === "__NEW_FILE__" ? "" : (v.thumbnail || "");
+        const processedVideos = await Promise.all(incomingVideos.map(async (v) => {
+            let thumbnailUrl = v.thumbnail === "__NEW_FILE__" ? "" : v.thumbnail || "";
             if (v.thumbnail === "__NEW_FILE__" && files[fileIndex]) {
                 try {
-                    const result = await uploadToR2(files[fileIndex], "video-gallery/thumbnails");
-                    thumbnailUrl = result.url;
+                    thumbnailUrl = await uploadToR2(files[fileIndex], "video-gallery/thumbnails");
                 }
                 catch (uploadError) {
-                    console.error("Failed to upload thumbnail:", uploadError);
+                    console.error(`[Upload] Failed to upload thumbnail for ${v.youtubeId}:`, uploadError);
                 }
                 fileIndex++;
             }
@@ -83,11 +88,30 @@ const upsertVideoGallery = async (req, res) => {
                 isActive: v.isActive !== false,
             };
         }));
+        // 4. Clean up orphaned R2 thumbnails (if a user deleted a video or replaced an image)
+        const newThumbnailUrls = processedVideos
+            .map((v) => v.thumbnail)
+            .filter((url) => url);
+        // ✅ FIXED: Strict TypeScript typing to prevent TS7006 implicit any error
+        const orphanedThumbnails = existingThumbnails.filter((oldUrl) => !newThumbnailUrls.includes(oldUrl));
+        if (orphanedThumbnails.length > 0) {
+            console.log(`[Cleanup] Deleting ${orphanedThumbnails.length} orphaned thumbnails from R2...`);
+            // Run deletions in background to avoid blocking the database save
+            // ✅ FIXED: Strict TypeScript typing to prevent TS7006 implicit any error
+            Promise.all(orphanedThumbnails.map((url) => deleteFromR2(url))).catch((err) => {
+                console.error("[Cleanup] Error deleting orphaned thumbnails:", err);
+            });
+        }
+        // 5. Save to database
         const updatedGallery = await VideoGallery_1.default.findOneAndUpdate({}, { title, subtitle, videos: processedVideos }, { new: true, upsert: true, runValidators: true });
         res.status(200).json({ success: true, data: updatedGallery });
     }
     catch (error) {
-        res.status(500).json({ success: false, message: error.message || "Server Error" });
+        // Handle JSON parse errors or validation errors safely
+        const message = error instanceof SyntaxError
+            ? "Invalid JSON payload"
+            : error.message || "Server Error";
+        res.status(500).json({ success: false, message });
     }
 };
 exports.upsertVideoGallery = upsertVideoGallery;
@@ -96,21 +120,32 @@ const deleteVideo = async (req, res) => {
         const { youtubeId } = req.params;
         const gallery = await VideoGallery_1.default.findOne();
         if (!gallery) {
-            return res.status(404).json({ success: false, message: "Gallery not found" });
+            return res
+                .status(404)
+                .json({ success: false, message: "Gallery not found" });
         }
         // ✅ FIX: Added explicit type (v: IVideoItem) to the find callback
         const videoToDelete = gallery.videos.find((v) => v.youtubeId === youtubeId);
         if (!videoToDelete) {
-            return res.status(404).json({ success: false, message: "Video not found in gallery" });
+            return res
+                .status(404)
+                .json({ success: false, message: "Video not found in gallery" });
         }
-        if (videoToDelete.thumbnail) {
+        // Delete the thumbnail from R2 if it exists and isn't a base64 string
+        if (videoToDelete.thumbnail &&
+            !videoToDelete.thumbnail.startsWith("data:")) {
             await deleteFromR2(videoToDelete.thumbnail);
         }
+        // Remove video from the array using MongoDB $pull
         await VideoGallery_1.default.updateOne({}, { $pull: { videos: { youtubeId } } });
-        res.status(200).json({ success: true, message: "Video deleted successfully" });
+        res
+            .status(200)
+            .json({ success: true, message: "Video deleted successfully" });
     }
     catch (error) {
-        res.status(500).json({ success: false, message: error.message || "Server Error" });
+        res
+            .status(500)
+            .json({ success: false, message: error.message || "Server Error" });
     }
 };
 exports.deleteVideo = deleteVideo;
