@@ -19,24 +19,28 @@ export const sendPhoneVerification = async (
   try {
     const { phoneNumber } = req.body;
     if (!phoneNumber) {
-      res
-        .status(400)
-        .json({ success: false, message: "Phone number is required" });
+      res.status(400).json({ success: false, message: "Phone number is required" });
       return;
     }
     const result = await sendPhoneVerificationUtil(phoneNumber);
-    res.status(200).json({
-      success: true,
-      message: result.message || "Verification code sent successfully",
-    });
+
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        message: result.message || "Verification code sent successfully",
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message || "Failed to send verification code",
+      });
+    }
   } catch (error: any) {
     console.error("Error sending phone verification:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Failed to send verification code",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to send verification code",
+    });
   }
 };
 
