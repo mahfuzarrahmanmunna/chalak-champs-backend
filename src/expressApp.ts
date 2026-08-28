@@ -22,6 +22,8 @@ import featureCoursesBannerRoutes from "./routes/featureCoursesBannerRoutes";
 import videoGalleryRoutes from "./routes/videoGalleryRoute";
 import ProductOrderRoutes from "./routes/ProductOrderRoutes";
 import { AppError } from "./middleware/errorHandler";
+import manualPaymentRoutes from "./routes/manualPaymentRoutes";
+
 
 export function createExpressApp() {
   const app = express();
@@ -139,6 +141,7 @@ export function createExpressApp() {
   app.use("/api/feature-courses-banner", featureCoursesBannerRoutes);
   app.use("/api/video-gallery", videoGalleryRoutes);
   app.use("/api/product-orders", ProductOrderRoutes);
+  app.use("/api/manual-payment", manualPaymentRoutes);
 
   // ==========================================
   // 7. HEALTH & ROOT ROUTES

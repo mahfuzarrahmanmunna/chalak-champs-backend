@@ -1,27 +1,25 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface IEnrollment extends Document {
-  name: string;
-  phone: string;
-  email?: string;
-  courseId: string;
-  courseTitle: string;
-  amount: string;
-  createdAt: Date;
+  user: mongoose.Types.ObjectId;
+  course: mongoose.Types.ObjectId;
+  status: "active" | "expired" | "blocked";
+  enrolledAt: Date;
+  expiresAt?: Date;
 }
 
-const EnrollmentSchema: Schema = new Schema(
+const EnrollmentSchema = new Schema<IEnrollment>(
   {
-    name: { type: String, required: true },
-    phone: { type: String, required: true },
-    email: { type: String, required: false, default: undefined },
-    courseId: { type: String, required: true },
-    courseTitle: { type: String, required: true },
-    amount: { type: String, required: true },
+    user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    course: { type: Schema.Types.ObjectId, ref: "Course", required: true },
+    status: { type: String, enum: ["active", "expired", "blocked"], default: "active" },
+    enrolledAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true }
 );
+
+// Prevent a user from being enrolled in the same course twice
+EnrollmentSchema.index({ user: 1, course: 1 }, { unique: true });
 
 export default mongoose.model<IEnrollment>("Enrollment", EnrollmentSchema);
