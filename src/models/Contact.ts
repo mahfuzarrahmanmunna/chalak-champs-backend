@@ -1,51 +1,58 @@
-import mongoose, { Document, Schema } from "mongoose";
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface IContact extends Document {
   studentName: string;
-  fatherName: string;
+  guardianName: string;
+  countryCode: string;
   phone: string;
-  class: string;
-  country: {
-    name: string;
-    flag: string;
-    code: string;
-    cca2: string;
-  };
-  submittedAt: Date;
+  classLevel: string;
+  message?: string;
+  contactMethod: "call" | "whatsapp";
+  isResolved: boolean;
 }
 
-const ContactSchema: Schema = new Schema(
+const ContactSchema = new Schema<IContact>(
   {
     studentName: {
       type: String,
-      required: true,
+      required: [true, "Student name is required"],
       trim: true,
     },
-    fatherName: {
+    guardianName: {
+      type: String,
+      required: [true, "Guardian name is required"],
+      trim: true,
+    },
+    countryCode: {
       type: String,
       required: true,
-      trim: true,
+      default: "+880",
     },
     phone: {
       type: String,
-      required: true,
+      required: [true, "Phone number is required"],
       trim: true,
     },
-    class: {
+    classLevel: {
       type: String,
-      required: true,
+      required: [true, "Class level is required"],
     },
-    country: {
-      name: { type: String },
-      flag: { type: String },
-      code: { type: String },
-      cca2: { type: String },
+    message: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    contactMethod: {
+      type: String,
+      enum: ["call", "whatsapp"],
+      default: "whatsapp",
+    },
+    isResolved: {
+      type: Boolean,
+      default: false,
     },
   },
-  { timestamps: true },
+  { timestamps: true }, // Automatically adds createdAt and updatedAt
 );
 
-const Contact =
-  mongoose.models.Contact || mongoose.model<IContact>("Contact", ContactSchema);
-
-export default Contact;
+export default mongoose.model<IContact>("Contact", ContactSchema);

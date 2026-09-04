@@ -23,6 +23,9 @@ import videoGalleryRoutes from "./routes/videoGalleryRoute";
 import ProductOrderRoutes from "./routes/ProductOrderRoutes";
 import { AppError } from "./middleware/errorHandler";
 import manualPaymentRoutes from "./routes/manualPaymentRoutes";
+import progressRoutes from "./routes/progressRoutes";
+import contactRoutes from "./routes/contactRoutes";
+
 
 
 export function createExpressApp() {
@@ -133,6 +136,7 @@ export function createExpressApp() {
   app.use("/api/freebooking", freeBookingRoutes);
   app.use("/api/freebookingprops", freeBookingRoutes);
   app.use("/api/exam", examRoutes);
+  app.use("/api/enrollment", enrollmentRoutes);
   app.use("/api/enrollments", enrollmentRoutes);
   app.use("/api/cta", ctaRoutes);
   app.use("/api/orders", orderRoutes);
@@ -142,6 +146,9 @@ export function createExpressApp() {
   app.use("/api/video-gallery", videoGalleryRoutes);
   app.use("/api/product-orders", ProductOrderRoutes);
   app.use("/api/manual-payment", manualPaymentRoutes);
+  app.use("/api/manual-payments", manualPaymentRoutes);
+  app.use("/api/courses", progressRoutes);
+  app.use("/api/contact", contactRoutes);
 
   // ==========================================
   // 7. HEALTH & ROOT ROUTES

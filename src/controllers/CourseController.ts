@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import { AuthRequest } from "../middleware/auth";
 import { AppError, catchAsync } from "../middleware/errorHandler";
 import { R2Service } from "../services/r2.service";
@@ -543,7 +544,16 @@ export const getAdminCourses = catchAsync(
 // 4. GET SINGLE COURSE BY ID
 // ====================================================================
 export const getCourseById = catchAsync(async (req: Request, res: Response) => {
-  const course = await Course.findById(req.params.id).populate(
+  const { id } = req.params;
+
+  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid course ID format.",
+    });
+  }
+
+  const course = await Course.findById(id).populate(
     "instructor",
     "name email",
   );

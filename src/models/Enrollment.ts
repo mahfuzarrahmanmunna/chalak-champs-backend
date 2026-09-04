@@ -3,23 +3,29 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IEnrollment extends Document {
   user: mongoose.Types.ObjectId;
   course: mongoose.Types.ObjectId;
-  status: "active" | "expired" | "blocked";
+  status: "active" | "expired" | "revoked";
   enrolledAt: Date;
-  expiresAt?: Date;
+  expiresAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const EnrollmentSchema = new Schema<IEnrollment>(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", required: true },
     course: { type: Schema.Types.ObjectId, ref: "Course", required: true },
-    status: { type: String, enum: ["active", "expired", "blocked"], default: "active" },
+    status: {
+      type: String,
+      enum: ["active", "expired", "revoked"],
+      default: "active",
+    },
     enrolledAt: { type: Date, default: Date.now },
-    expiresAt: { type: Date },
+    expiresAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-// Prevent a user from being enrolled in the same course twice
+// Prevent duplicate enrollments
 EnrollmentSchema.index({ user: 1, course: 1 }, { unique: true });
 
 export default mongoose.model<IEnrollment>("Enrollment", EnrollmentSchema);

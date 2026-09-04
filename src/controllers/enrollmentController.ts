@@ -1,80 +1,132 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import Enrollment from "../models/Enrollment";
+import ManualPayment from "../models/ManualPayment";
+import { AuthRequest } from "../middleware/auth";
 
-export const createEnrollment = async (req: any, res: Response) => {
+// Check if user is enrolled in a specific course
+export const checkEnrollment = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
-    const { name, phone, email, courseId, courseTitle, amount } = req.body;
+    const { courseId } = req.body;
+    const user = req.user;
 
-    // Only name and phone are required
-    if (!name || !phone || !courseId || !courseTitle) {
+    if (!courseId) {
       res.status(400).json({
         success: false,
-        message: "Please provide name, phone, courseId, and courseTitle",
+        message: "Course ID is required",
       });
       return;
     }
 
-    const newEnrollment = new Enrollment({
-      name: name.trim(),
-      phone: phone.trim(),
-      email: email ? email.trim() : undefined,
-      courseId,
-      courseTitle,
-      amount: amount || "0",
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+      return;
+    }
+
+    const enrollment = await Enrollment.findOne({
+      user: user._id,
+      course: courseId,
+      status: "active",
     });
 
-    await newEnrollment.save();
+    const pendingPayment = await ManualPayment.findOne({
+      user: user._id,
+      course: courseId,
+      status: "pending",
+    });
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
-      message: "Enrollment submitted successfully!",
+      isEnrolled: !!enrollment,
+      hasPendingPayment: !!pendingPayment,
     });
   } catch (error: any) {
-    console.error("Error creating enrollment:", error);
+    console.error("Check Enrollment Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Server Error",
+    });
+  }
+};
 
-    // Handle mongoose validation errors
-    if (error.name === "ValidationError") {
-      const messages = Object.values(error.errors).map(
-        (err: any) => err.message,
-      );
-      res.status(400).json({
+// Get all enrollments for a user
+export const getUserEnrollments = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      res.status(401).json({
         success: false,
-        message: messages.join(", "),
+        message: "Unauthorized",
       });
       return;
     }
 
-    res
-      .status(500)
-      .json({ success: false, message: "Server Error. Please try again." });
-  }
-};
+    const enrollments = await Enrollment.find({ user: user._id })
+      .populate("course", "title thumbnail originalPrice offerPrice slug")
+      .sort({ createdAt: -1 });
 
-export const getAllEnrollments = async (req: any, res: Response) => {
-  try {
-    const enrollments = await Enrollment.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, enrollments });
+    res.status(200).json({
+      success: true,
+      data: enrollments,
+    });
   } catch (error: any) {
-    console.error("Error fetching enrollments:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
-export const deleteEnrollment = async (req: any, res: Response) => {
+// Check multiple enrollments at once
+export const checkMultipleEnrollments = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
-    const { id } = req.params;
-    const deletedEnrollment = await Enrollment.findByIdAndDelete(id);
+    const { courseIds } = req.body;
+    const user = req.user;
 
-    if (!deletedEnrollment) {
-      res.status(404).json({ success: false, message: "Enrollment not found" });
+    if (!courseIds || !Array.isArray(courseIds)) {
+      res.status(400).json({
+        success: false,
+        message: "courseIds array is required",
+      });
       return;
     }
 
-    res
-      .status(200)
-      .json({ success: true, message: "Enrollment deleted successfully" });
+    if (!user) {
+      res.status(200).json({
+        success: true,
+        enrolledCourseIds: [],
+      });
+      return;
+    }
+
+    const enrollments = await Enrollment.find({
+      user: user._id,
+      course: { $in: courseIds },
+      status: "active",
+    }).select("course");
+
+    const enrolledCourseIds = enrollments.map((e) => e.course.toString());
+
+    res.status(200).json({
+      success: true,
+      enrolledCourseIds,
+    });
   } catch (error: any) {
-    console.error("Error deleting enrollment:", error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

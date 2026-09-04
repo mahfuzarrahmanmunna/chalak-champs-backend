@@ -19,12 +19,32 @@ const ManualPaymentSchema = new Schema<IManualPayment>(
     course: { type: Schema.Types.ObjectId, ref: "Course", required: true },
     userName: { type: String, required: true },
     userPhone: { type: String, required: true },
-    paymentMethod: { type: String, required: true, enum: ["bkash", "nagad", "rocket", "bank"] },
+    paymentMethod: {
+      type: String,
+      required: true,
+      enum: ["bkash", "nagad", "rocket", "bank"],
+    },
     transactionId: { type: String, required: true },
     amount: { type: Number, required: true },
-    status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export default mongoose.model<IManualPayment>("ManualPayment", ManualPaymentSchema);
+// Prevent duplicate pending payments for same user+course
+ManualPaymentSchema.index(
+  { user: 1, course: 1, status: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: "pending" },
+  },
+);
+
+export default mongoose.model<IManualPayment>(
+  "ManualPayment",
+  ManualPaymentSchema,
+);

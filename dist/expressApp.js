@@ -26,6 +26,7 @@ const heroRoutes_1 = __importDefault(require("./routes/heroRoutes"));
 const featureCoursesBannerRoutes_1 = __importDefault(require("./routes/featureCoursesBannerRoutes"));
 const videoGalleryRoute_1 = __importDefault(require("./routes/videoGalleryRoute"));
 const ProductOrderRoutes_1 = __importDefault(require("./routes/ProductOrderRoutes"));
+const manualPaymentRoutes_1 = __importDefault(require("./routes/manualPaymentRoutes"));
 /**
  * Builds the Express app (middleware + routes) without calling listen().
  */
@@ -120,6 +121,7 @@ function createExpressApp() {
     app.use("/api/freebooking", freeBookingRoutes_1.default);
     app.use("/api/freebookingprops", freeBookingRoutes_1.default);
     app.use("/api/exam", examRoutes_1.default);
+    app.use("/api/enrollment", enrollmentRoutes_1.default);
     app.use("/api/enrollments", enrollmentRoutes_1.default);
     app.use("/api/cta", ctaRoutes_1.default);
     app.use("/api/orders", orderRoutes_1.default);
@@ -128,6 +130,8 @@ function createExpressApp() {
     app.use("/api/feature-courses-banner", featureCoursesBannerRoutes_1.default);
     app.use("/api/video-gallery", videoGalleryRoute_1.default);
     app.use("/api/product-orders", ProductOrderRoutes_1.default);
+    app.use("/api/manual-payment", manualPaymentRoutes_1.default);
+    app.use("/api/manual-payments", manualPaymentRoutes_1.default);
     // ==========================================
     // 8. HEALTH & ROOT ROUTES
     // ==========================================
