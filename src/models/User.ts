@@ -11,6 +11,8 @@ export interface IUser extends Document {
   fullName?: string;
   phoneNumber?: string;
   avatar?: string;
+  profileImageUrl?: string;
+  profileImageKey?: string;
   role: UserRole;
   isActive: boolean;
   bio?: string;
@@ -35,6 +37,8 @@ const UserSchema = new Schema<IUser>(
     fullName: { type: String, trim: true },
     phoneNumber: { type: String, trim: true },
     avatar: { type: String },
+    profileImageUrl: { type: String },
+    profileImageKey: { type: String, default: "" },
     role: {
       type: String,
       enum: ["student", "teacher", "instructor", "admin"],

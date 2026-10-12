@@ -17,7 +17,7 @@ export const sendPhoneVerification = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const { phoneNumber } = req.body;
+    const phoneNumber = String(req.body?.phoneNumber ?? "").trim();
     if (!phoneNumber) {
       res.status(400).json({ success: false, message: "Phone number is required" });
       return;
@@ -30,7 +30,14 @@ export const sendPhoneVerification = async (
         message: result.message || "Verification code sent successfully",
       });
     } else {
-      res.status(400).json({
+      const statusCode =
+        result.statusCode === 400 && /invalid phone number|required/i.test(result.message || "")
+          ? 400
+          : result.statusCode === 404 || result.statusCode === 503
+            ? 503
+            : result.statusCode || 503;
+
+      res.status(statusCode).json({
         success: false,
         message: result.message || "Failed to send verification code",
       });

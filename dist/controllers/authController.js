@@ -11,24 +11,33 @@ const phoneService_1 = require("../utils/phoneService");
 // Send verification code for phone number
 const sendPhoneVerification = async (req, res) => {
     try {
-        const { phoneNumber } = req.body;
+        const phoneNumber = String(req.body?.phoneNumber ?? "").trim();
         if (!phoneNumber) {
-            res
-                .status(400)
-                .json({ success: false, message: "Phone number is required" });
+            res.status(400).json({ success: false, message: "Phone number is required" });
             return;
         }
         const result = await (0, phoneService_1.sendPhoneVerification)(phoneNumber);
-        res.status(200).json({
-            success: true,
-            message: result.message || "Verification code sent successfully",
-        });
+        if (result.success) {
+            res.status(200).json({
+                success: true,
+                message: result.message || "Verification code sent successfully",
+            });
+        }
+        else {
+            const statusCode = result.statusCode === 400 && /invalid phone number|required/i.test(result.message || "")
+                ? 400
+                : result.statusCode === 404 || result.statusCode === 503
+                    ? 503
+                    : result.statusCode || 503;
+            res.status(statusCode).json({
+                success: false,
+                message: result.message || "Failed to send verification code",
+            });
+        }
     }
     catch (error) {
         console.error("Error sending phone verification:", error);
-        res
-            .status(500)
-            .json({
+        res.status(500).json({
             success: false,
             message: error.message || "Failed to send verification code",
         });

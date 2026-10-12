@@ -544,7 +544,7 @@ export const getAdminCourses = catchAsync(
 // 4. GET SINGLE COURSE BY ID
 // ====================================================================
 export const getCourseById = catchAsync(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   if (!id || !mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({

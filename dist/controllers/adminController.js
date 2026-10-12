@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getRecentCourses = exports.getUserStats = exports.bulkDeleteUsers = exports.deleteUser = exports.updateUser = exports.createUserByAdmin = exports.getUserById = exports.getUsers = void 0;
+exports.getRecentCourses = exports.getUserStats = exports.updateUserPermissions = exports.getUserPermissions = exports.bulkDeleteUsers = exports.deleteUser = exports.updateUser = exports.createUserByAdmin = exports.getUserById = exports.getUsers = void 0;
 const User_1 = __importDefault(require("../models/User"));
 const Course_1 = __importDefault(require("../models/Course"));
 const mongoose_1 = __importDefault(require("mongoose"));
@@ -22,7 +22,6 @@ const getUsers = async (req, res) => {
         const isEmailVerified = req.query.isEmailVerified;
         const isPhoneVerified = req.query.isPhoneVerified;
         const skip = (page - 1) * limit;
-        // Build search query
         const query = {};
         if (search) {
             query.$or = [
@@ -41,7 +40,6 @@ const getUsers = async (req, res) => {
         if (isPhoneVerified !== undefined) {
             query.isPhoneVerified = isPhoneVerified === "true";
         }
-        // Get users and total count
         const [users, totalCount] = await Promise.all([
             User_1.default.find(query)
                 .sort({ createdAt: -1 })
@@ -78,28 +76,21 @@ const getUserById = async (req, res) => {
     try {
         const { id } = req.params;
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid user ID",
-            });
+            res.status(400).json({ success: false, message: "Invalid user ID" });
             return;
         }
         const user = await User_1.default.findById(id).select("-__v");
         if (!user) {
-            res.status(404).json({
-                success: false,
-                message: "User not found",
-            });
+            res.status(404).json({ success: false, message: "User not found" });
             return;
         }
-        res.status(200).json({
-            success: true,
-            user: user,
-        });
+        res.status(200).json({ success: true, user: user });
     }
     catch (error) {
         console.error("Error fetching user:", error);
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
             success: false,
             message: error.message || "Failed to fetch user",
         });
@@ -110,20 +101,20 @@ exports.getUserById = getUserById;
 const createUserByAdmin = async (req, res) => {
     try {
         const { email, firstName, lastName, phoneNumber, role = "student", } = req.body;
-        // Check if user already exists
         const existingUser = await User_1.default.findOne({
             $or: [{ email }, ...(phoneNumber ? [{ phoneNumber }] : [])],
         });
         if (existingUser) {
-            res.status(400).json({
+            res
+                .status(400)
+                .json({
                 success: false,
                 message: "User with this email or phone number already exists",
             });
             return;
         }
-        // Create new user
         const user = new User_1.default({
-            uid: new mongoose_1.default.Types.ObjectId().toString(), // Generate temporary UID
+            uid: new mongoose_1.default.Types.ObjectId().toString(),
             email,
             firstName,
             lastName,
@@ -133,14 +124,13 @@ const createUserByAdmin = async (req, res) => {
             isPhoneVerified: !!phoneNumber ? false : undefined,
         });
         await user.save();
-        // Send verification emails/SMS if needed
-        if (email) {
+        if (email)
             await (0, emailService_1.sendVerificationEmail)(email);
-        }
-        if (phoneNumber) {
+        if (phoneNumber)
             await (0, phoneService_1.sendPhoneVerification)(phoneNumber);
-        }
-        res.status(201).json({
+        res
+            .status(201)
+            .json({
             success: true,
             message: "User created successfully",
             user: user,
@@ -148,28 +138,25 @@ const createUserByAdmin = async (req, res) => {
     }
     catch (error) {
         console.error("Error creating user:", error);
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
             success: false,
             message: error.message || "Failed to create user",
         });
     }
 };
 exports.createUserByAdmin = createUserByAdmin;
-// Update user
+// Update user (Including Role Change)
 const updateUser = async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid user ID",
-            });
+            res.status(400).json({ success: false, message: "Invalid user ID" });
             return;
         }
-        // Convert string ID to ObjectId
         const objectId = new mongoose_1.default.Types.ObjectId(id);
-        // Don't allow updating UID or email to existing one
         const { uid, email, ...allowedUpdates } = updates;
         if (email) {
             const existingUser = await User_1.default.findOne({
@@ -177,23 +164,21 @@ const updateUser = async (req, res) => {
                 _id: { $ne: objectId },
             });
             if (existingUser) {
-                res.status(400).json({
-                    success: false,
-                    message: "Email already exists",
-                });
+                res
+                    .status(400)
+                    .json({ success: false, message: "Email already exists" });
                 return;
             }
             allowedUpdates.email = email;
         }
         const user = await User_1.default.findByIdAndUpdate(id, { $set: allowedUpdates }, { new: true, runValidators: true }).select("-__v");
         if (!user) {
-            res.status(404).json({
-                success: false,
-                message: "User not found",
-            });
+            res.status(404).json({ success: false, message: "User not found" });
             return;
         }
-        res.status(200).json({
+        res
+            .status(200)
+            .json({
             success: true,
             message: "User updated successfully",
             user: user,
@@ -201,7 +186,9 @@ const updateUser = async (req, res) => {
     }
     catch (error) {
         console.error("Error updating user:", error);
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
             success: false,
             message: error.message || "Failed to update user",
         });
@@ -213,28 +200,23 @@ const deleteUser = async (req, res) => {
     try {
         const { id } = req.params;
         if (!mongoose_1.default.Types.ObjectId.isValid(id)) {
-            res.status(400).json({
-                success: false,
-                message: "Invalid user ID",
-            });
+            res.status(400).json({ success: false, message: "Invalid user ID" });
             return;
         }
         const user = await User_1.default.findByIdAndDelete(id);
         if (!user) {
-            res.status(404).json({
-                success: false,
-                message: "User not found",
-            });
+            res.status(404).json({ success: false, message: "User not found" });
             return;
         }
-        res.status(200).json({
-            success: true,
-            message: "User deleted successfully",
-        });
+        res
+            .status(200)
+            .json({ success: true, message: "User deleted successfully" });
     }
     catch (error) {
         console.error("Error deleting user:", error);
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
             success: false,
             message: error.message || "Failed to delete user",
         });
@@ -246,22 +228,18 @@ const bulkDeleteUsers = async (req, res) => {
     try {
         const { userIds } = req.body;
         if (!Array.isArray(userIds) || userIds.length === 0) {
-            res.status(400).json({
-                success: false,
-                message: "User IDs array is required",
-            });
+            res
+                .status(400)
+                .json({ success: false, message: "User IDs array is required" });
             return;
         }
-        // Validate all IDs
         const validIds = userIds.filter((id) => mongoose_1.default.Types.ObjectId.isValid(id));
         if (validIds.length === 0) {
-            res.status(400).json({
-                success: false,
-                message: "No valid user IDs provided",
-            });
+            res
+                .status(400)
+                .json({ success: false, message: "No valid user IDs provided" });
             return;
         }
-        // Convert string IDs to ObjectIds
         const objectIds = validIds.map((id) => new mongoose_1.default.Types.ObjectId(id));
         const result = await User_1.default.deleteMany({ _id: { $in: objectIds } });
         res.status(200).json({
@@ -272,7 +250,9 @@ const bulkDeleteUsers = async (req, res) => {
     }
     catch (error) {
         console.error("Error bulk deleting users:", error);
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
             success: false,
             message: error.message || "Failed to delete users",
         });
@@ -280,12 +260,51 @@ const bulkDeleteUsers = async (req, res) => {
 };
 exports.bulkDeleteUsers = bulkDeleteUsers;
 // ==========================================
+// PERMISSION MANAGEMENT CONTROLLERS
+// ==========================================
+// Get user permissions
+const getUserPermissions = async (req, res) => {
+    try {
+        const user = await User_1.default.findById(req.params.id).select("firstName lastName role permissions");
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        res.status(200).json({ success: true, user });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getUserPermissions = getUserPermissions;
+// Update user permissions
+const updateUserPermissions = async (req, res) => {
+    try {
+        const { permissions } = req.body;
+        if (!Array.isArray(permissions)) {
+            res
+                .status(400)
+                .json({ success: false, message: "Permissions must be an array" });
+            return;
+        }
+        const user = await User_1.default.findByIdAndUpdate(req.params.id, { permissions }, { new: true }).select("firstName lastName role permissions");
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return;
+        }
+        res.status(200).json({ success: true, user });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.updateUserPermissions = updateUserPermissions;
+// ==========================================
 // DASHBOARD STATISTICS & COURSES
 // ==========================================
 // Get user statistics (Updated to include Courses)
 const getUserStats = async (req, res) => {
     try {
-        // 1. Fetch User Stats
         const [totalUsers, adminUsers, studentUsers, verifiedEmailUsers, verifiedPhoneUsers, recentUsers,] = await Promise.all([
             User_1.default.countDocuments(),
             User_1.default.countDocuments({ role: "admin" }),
@@ -316,14 +335,12 @@ const getUserStats = async (req, res) => {
             },
             { $sort: { "_id.year": 1, "_id.month": 1 } },
         ]);
-        // 2. Fetch Course Stats
         let totalCourses = 0;
         let activeCourses = 0;
         let totalLessons = 0;
         try {
             totalCourses = await Course_1.default.countDocuments();
             activeCourses = await Course_1.default.countDocuments({ status: "active" });
-            // FIX: Cast 'course' to 'any' to avoid TypeScript error if 'lessons' is missing from ICourse interface
             const coursesWithLessons = await Course_1.default.find({
                 lessons: { $exists: true, $ne: [] },
             });
@@ -334,7 +351,6 @@ const getUserStats = async (req, res) => {
         catch (err) {
             console.warn("Course model not found or error fetching courses:", err);
         }
-        // 3. Calculate new users this month
         const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         const newUsersThisMonth = await User_1.default.countDocuments({
             createdAt: { $gte: startOfMonth },
@@ -344,11 +360,10 @@ const getUserStats = async (req, res) => {
             stats: {
                 totalUsers,
                 totalCourses,
-                totalRevenue: 0, // TODO: Implement Payment logic
+                totalRevenue: 0,
                 totalLessons,
                 newUsersThisMonth,
                 activeCourses,
-                // Extras
                 adminUsers,
                 studentUsers,
                 recentUsers,
@@ -358,7 +373,9 @@ const getUserStats = async (req, res) => {
     }
     catch (error) {
         console.error("Error fetching user stats:", error);
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
             success: false,
             message: error.message || "Failed to fetch user statistics",
         });
@@ -369,19 +386,17 @@ exports.getUserStats = getUserStats;
 const getRecentCourses = async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 5;
-        // Fetch recent courses
         const courses = await Course_1.default.find()
             .sort({ createdAt: -1 })
             .limit(limit)
             .select("title instructor thumbnail status createdAt");
-        res.status(200).json({
-            success: true,
-            courses: courses,
-        });
+        res.status(200).json({ success: true, courses: courses });
     }
     catch (error) {
         console.error("Error fetching courses:", error);
-        res.status(500).json({
+        res
+            .status(500)
+            .json({
             success: false,
             message: error.message || "Failed to fetch courses",
         });

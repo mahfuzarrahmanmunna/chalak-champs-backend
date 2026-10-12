@@ -26,7 +26,8 @@ import manualPaymentRoutes from "./routes/manualPaymentRoutes";
 import progressRoutes from "./routes/progressRoutes";
 import contactRoutes from "./routes/contactRoutes";
 
-
+// ✅ NEW IMPORT
+import galleryRoutes from "./routes/galleryRoutes";
 
 export function createExpressApp() {
   const app = express();
@@ -149,6 +150,9 @@ export function createExpressApp() {
   app.use("/api/manual-payments", manualPaymentRoutes);
   app.use("/api/courses", progressRoutes);
   app.use("/api/contact", contactRoutes);
+  
+  // ✅ NEW GALLERY ROUTE ADDED HERE
+  app.use("/api/gallery", galleryRoutes);
 
   // ==========================================
   // 7. HEALTH & ROOT ROUTES

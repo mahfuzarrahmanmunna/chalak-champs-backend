@@ -37,29 +37,41 @@ const mongoose_1 = __importStar(require("mongoose"));
 const ContactSchema = new mongoose_1.Schema({
     studentName: {
         type: String,
-        required: true,
+        required: [true, "Student name is required"],
         trim: true,
     },
-    fatherName: {
+    guardianName: {
+        type: String,
+        required: [true, "Guardian name is required"],
+        trim: true,
+    },
+    countryCode: {
         type: String,
         required: true,
-        trim: true,
+        default: "+880",
     },
     phone: {
         type: String,
-        required: true,
+        required: [true, "Phone number is required"],
         trim: true,
     },
-    class: {
+    classLevel: {
         type: String,
-        required: true,
+        required: [true, "Class level is required"],
     },
-    country: {
-        name: { type: String },
-        flag: { type: String },
-        code: { type: String },
-        cca2: { type: String },
+    message: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+    contactMethod: {
+        type: String,
+        enum: ["call", "whatsapp"],
+        default: "whatsapp",
+    },
+    isResolved: {
+        type: Boolean,
+        default: false,
     },
 }, { timestamps: true });
-const Contact = mongoose_1.default.models.Contact || mongoose_1.default.model("Contact", ContactSchema);
-exports.default = Contact;
+exports.default = mongoose_1.default.model("Contact", ContactSchema);

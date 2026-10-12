@@ -12,6 +12,7 @@ class R2Service {
         }
         const extension = this.getExtensionFromMimeType(mimeType);
         const key = this.generateUniqueKey(folder, extension);
+        const url = this.buildPublicUrl(key);
         await r2_1.r2Client.send(new client_s3_1.PutObjectCommand({
             Bucket: r2_1.r2BucketName,
             Key: key,
@@ -19,7 +20,6 @@ class R2Service {
             ContentType: mimeType,
             ACL: "public-read",
         }));
-        const url = this.buildPublicUrl(key);
         return { url, key };
     }
     // Keep old name as alias for backwards compatibility
@@ -68,7 +68,13 @@ class R2Service {
         }
     }
     static buildPublicUrl(key) {
-        const baseUrl = r2_1.r2PublicUrl.replace(/\/$/, "");
+        const configuredBaseUrl = r2_1.r2PublicUrl.trim().replace(/\/+$/, "");
+        if (!configuredBaseUrl) {
+            throw new Error("R2_PUBLIC_URL is not configured");
+        }
+        const baseUrl = /^https?:\/\//i.test(configuredBaseUrl)
+            ? configuredBaseUrl
+            : `https://${configuredBaseUrl.replace(/^\/+/, "")}`;
         return `${baseUrl}/${key}`;
     }
     static extractKeyFromUrl(url) {

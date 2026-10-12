@@ -9,6 +9,8 @@ export interface IHero extends Document {
   cta2: string;
   cta2Btn: string;
   kingImage?: string;
+  kingImageClass?: string; // NEW
+  videoId?: string;        // NEW
 }
 
 const HeroSchema: Schema = new Schema(
@@ -21,6 +23,8 @@ const HeroSchema: Schema = new Schema(
     cta2: { type: String, required: true },
     cta2Btn: { type: String, required: true },
     kingImage: { type: String, required: false },
+    kingImageClass: { type: String, required: false }, // NEW
+    videoId: { type: String, required: false },        // NEW
   },
   { timestamps: true }
 );

@@ -35,13 +35,16 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const EnrollmentSchema = new mongoose_1.Schema({
-    name: { type: String, required: true },
-    phone: { type: String, required: true },
-    email: { type: String, required: false, default: undefined },
-    courseId: { type: String, required: true },
-    courseTitle: { type: String, required: true },
-    amount: { type: String, required: true },
-}, {
-    timestamps: true,
-});
+    user: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: true },
+    course: { type: mongoose_1.Schema.Types.ObjectId, ref: "Course", required: true },
+    status: {
+        type: String,
+        enum: ["active", "expired", "revoked"],
+        default: "active",
+    },
+    enrolledAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date, default: null },
+}, { timestamps: true });
+// Prevent duplicate enrollments
+EnrollmentSchema.index({ user: 1, course: 1 }, { unique: true });
 exports.default = mongoose_1.default.model("Enrollment", EnrollmentSchema);

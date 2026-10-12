@@ -48,6 +48,8 @@ const UserSchema = new mongoose_1.Schema({
     fullName: { type: String, trim: true },
     phoneNumber: { type: String, trim: true },
     avatar: { type: String },
+    profileImageUrl: { type: String },
+    profileImageKey: { type: String, default: "" },
     role: {
         type: String,
         enum: ["student", "teacher", "instructor", "admin"],
@@ -56,6 +58,8 @@ const UserSchema = new mongoose_1.Schema({
     },
     isActive: { type: Boolean, default: true },
     bio: { type: String, trim: true },
+    isEmailVerified: { type: Boolean, default: false }, // ✅ ADDED
+    isPhoneVerified: { type: Boolean, default: false }, // ✅ ADDED
 }, { timestamps: true });
 UserSchema.virtual("fullNameVirtual").get(function () {
     return `${this.firstName} ${this.lastName}`.trim();

@@ -43,5 +43,7 @@ const HeroSchema = new mongoose_1.Schema({
     cta2: { type: String, required: true },
     cta2Btn: { type: String, required: true },
     kingImage: { type: String, required: false },
+    kingImageClass: { type: String, required: false }, // NEW
+    videoId: { type: String, required: false }, // NEW
 }, { timestamps: true });
 exports.default = mongoose_1.default.model("Hero", HeroSchema);

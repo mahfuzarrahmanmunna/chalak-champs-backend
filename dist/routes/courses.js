@@ -9,6 +9,7 @@ const auth_1 = require("../middleware/auth");
 const multer_1 = __importDefault(require("multer"));
 const moduleController_1 = require("../controllers/moduleController");
 const lessonController_1 = require("../controllers/lessonController");
+const progressController_1 = require("../controllers/progressController");
 const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({ storage, limits: { fileSize: 500 * 1024 * 1024 } });
 // Groups files by fieldname so we can handle thumbnail, video,
@@ -71,4 +72,6 @@ router.put("/:courseId/modules/:moduleId/lessons/:lessonId", (0, auth_1.authoriz
     { name: "video", maxCount: 1 },
 ]), lessonController_1.updateLesson);
 router.delete("/:courseId/modules/:moduleId/lessons/:lessonId", (0, auth_1.authorize)("instructor", "admin"), moduleController_1.deleteLesson);
+router.post("/:courseId/modules/:moduleId/lessons/:lessonId/complete", auth_1.protect, // Assuming 'protect' is your auth middleware
+progressController_1.markLessonComplete);
 exports.default = router;

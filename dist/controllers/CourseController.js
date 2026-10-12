@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteCourse = exports.updateCourse = exports.getInstructorCourses = exports.getCourseBySlug = exports.getCourseById = exports.getAdminCourses = exports.getAllCourses = exports.createCourse = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const errorHandler_1 = require("../middleware/errorHandler");
 const r2_service_1 = require("../services/r2.service");
 const Course_1 = __importDefault(require("../models/Course"));
@@ -435,7 +436,14 @@ exports.getAdminCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
 // 4. GET SINGLE COURSE BY ID
 // ====================================================================
 exports.getCourseById = (0, errorHandler_1.catchAsync)(async (req, res) => {
-    const course = await Course_1.default.findById(req.params.id).populate("instructor", "name email");
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    if (!id || !mongoose_1.default.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+            success: false,
+            message: "Invalid course ID format.",
+        });
+    }
+    const course = await Course_1.default.findById(id).populate("instructor", "name email");
     if (!course) {
         return res
             .status(404)

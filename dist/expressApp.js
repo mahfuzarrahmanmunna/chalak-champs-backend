@@ -26,14 +26,16 @@ const heroRoutes_1 = __importDefault(require("./routes/heroRoutes"));
 const featureCoursesBannerRoutes_1 = __importDefault(require("./routes/featureCoursesBannerRoutes"));
 const videoGalleryRoute_1 = __importDefault(require("./routes/videoGalleryRoute"));
 const ProductOrderRoutes_1 = __importDefault(require("./routes/ProductOrderRoutes"));
+const errorHandler_1 = require("./middleware/errorHandler");
 const manualPaymentRoutes_1 = __importDefault(require("./routes/manualPaymentRoutes"));
-/**
- * Builds the Express app (middleware + routes) without calling listen().
- */
+const progressRoutes_1 = __importDefault(require("./routes/progressRoutes"));
+const contactRoutes_1 = __importDefault(require("./routes/contactRoutes"));
+// ✅ NEW IMPORT
+const galleryRoutes_1 = __importDefault(require("./routes/galleryRoutes"));
 function createExpressApp() {
     const app = (0, express_1.default)();
     // ==========================================
-    // 1. SECURITY & LOGGING (No body parsing!)
+    // 1. SECURITY & LOGGING
     // ==========================================
     app.use((0, helmet_1.default)());
     app.use((0, morgan_1.default)("dev"));
@@ -55,7 +57,6 @@ function createExpressApp() {
     if (allowLocalhost) {
         allowedOrigins.push("http://localhost:3000", "http://127.0.0.1:3000", "https://localhost:3000", "https://127.0.0.1:3000");
     }
-    // CORS middleware
     app.use((req, res, next) => {
         const origin = req.headers.origin;
         if (allowLocalhost || !origin || allowedOrigins.includes(origin)) {
@@ -71,12 +72,10 @@ function createExpressApp() {
     });
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
-            if (!origin || allowLocalhost) {
+            if (!origin || allowLocalhost)
                 return callback(null, true);
-            }
-            if (allowedOrigins.includes(origin)) {
+            if (allowedOrigins.includes(origin))
                 return callback(null, true);
-            }
             console.warn(`[CORS] Blocked origin: ${origin}`);
             return callback(new Error(`CORS policy does not allow access from origin ${origin}`));
         },
@@ -102,20 +101,16 @@ function createExpressApp() {
         }
     });
     // ==========================================
-    // 5. FILE UPLOAD ROUTES (BEFORE body parsers!)
-    // ==========================================
-    // These routes use Multer which needs raw multipart stream
-    app.use("/api/products", products_1.default);
-    app.use("/api/courses", courses_1.default);
-    app.use("/api/admin", admin_1.default); // If admin has uploads
-    // ==========================================
-    // 6. BODY PARSERS (AFTER file upload routes!)
+    // 5. BODY PARSERS (MUST BE BEFORE ALL API ROUTES!)
     // ==========================================
     app.use(express_1.default.json({ limit: "10mb" }));
     app.use(express_1.default.urlencoded({ extended: true, limit: "10mb" }));
     // ==========================================
-    // 7. JSON-ONLY ROUTES
+    // 6. API ROUTES
     // ==========================================
+    app.use("/api/products", products_1.default);
+    app.use("/api/courses", courses_1.default);
+    app.use("/api/admin", admin_1.default); // ✅ Only declared ONCE, after body parsers
     app.use("/api/auth", auth_1.default);
     app.use("/api/contact", contactSheet_1.default);
     app.use("/api/freebooking", freeBookingRoutes_1.default);
@@ -132,8 +127,12 @@ function createExpressApp() {
     app.use("/api/product-orders", ProductOrderRoutes_1.default);
     app.use("/api/manual-payment", manualPaymentRoutes_1.default);
     app.use("/api/manual-payments", manualPaymentRoutes_1.default);
+    app.use("/api/courses", progressRoutes_1.default);
+    app.use("/api/contact", contactRoutes_1.default);
+    // ✅ NEW GALLERY ROUTE ADDED HERE
+    app.use("/api/gallery", galleryRoutes_1.default);
     // ==========================================
-    // 8. HEALTH & ROOT ROUTES
+    // 7. HEALTH & ROOT ROUTES
     // ==========================================
     app.get("/health", (req, res) => {
         res.json({
@@ -150,7 +149,7 @@ function createExpressApp() {
         });
     });
     // ==========================================
-    // 9. 404 HANDLER
+    // 8. 404 HANDLER
     // ==========================================
     app.use((req, res) => {
         res.status(404).json({
@@ -159,7 +158,7 @@ function createExpressApp() {
         });
     });
     // ==========================================
-    // 10. GLOBAL ERROR HANDLER (with CORS)
+    // 9. GLOBAL ERROR HANDLER
     // ==========================================
     app.use((err, req, res, _next) => {
         console.error("=== SERVER ERROR ===");
@@ -172,7 +171,6 @@ function createExpressApp() {
             : err instanceof Error && err.message.includes("CORS")
                 ? 403
                 : 500;
-        // Ensure CORS headers on errors
         const origin = req.headers.origin;
         if (allowLocalhost || !origin || allowedOrigins.includes(origin || "")) {
             res.setHeader("Access-Control-Allow-Origin", origin || "*");
@@ -187,5 +185,3 @@ function createExpressApp() {
     });
     return app;
 }
-// Need to import AppError for the error handler
-const errorHandler_1 = require("./middleware/errorHandler");

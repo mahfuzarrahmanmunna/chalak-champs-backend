@@ -20,6 +20,7 @@ export class R2Service {
 
     const extension = this.getExtensionFromMimeType(mimeType);
     const key = this.generateUniqueKey(folder, extension);
+    const url = this.buildPublicUrl(key);
 
     await r2Client.send(
       new PutObjectCommand({
@@ -30,8 +31,6 @@ export class R2Service {
         ACL: "public-read",
       }),
     );
-
-    const url = this.buildPublicUrl(key);
 
     return { url, key };
   }
@@ -94,7 +93,14 @@ export class R2Service {
   }
 
   static buildPublicUrl(key: string): string {
-    const baseUrl = r2PublicUrl.replace(/\/$/, "");
+    const configuredBaseUrl = r2PublicUrl.trim().replace(/\/+$/, "");
+    if (!configuredBaseUrl) {
+      throw new Error("R2_PUBLIC_URL is not configured");
+    }
+
+    const baseUrl = /^https?:\/\//i.test(configuredBaseUrl)
+      ? configuredBaseUrl
+      : `https://${configuredBaseUrl.replace(/^\/+/, "")}`;
     return `${baseUrl}/${key}`;
   }
 
