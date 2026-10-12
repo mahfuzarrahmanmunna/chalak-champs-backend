@@ -353,6 +353,14 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
 exports.getAllCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
     const { category, search, published, limit, page } = req.query;
     const filter = {};
+    const requestedLimit = Number(limit);
+    const limitNum = Number.isFinite(requestedLimit) && requestedLimit > 0
+        ? Math.max(1, Math.min(Math.floor(requestedLimit), 100))
+        : 50;
+    const requestedPage = Number(page);
+    const pageNum = Number.isSafeInteger(requestedPage) && requestedPage > 0
+        ? requestedPage
+        : 1;
     if (category && category !== "all") {
         filter.category = category;
     }
@@ -375,18 +383,30 @@ exports.getAllCourses = (0, errorHandler_1.catchAsync)(async (req, res) => {
             { instructorName: { $regex: search, $options: "i" } },
         ];
     }
-    const courses = await Course_1.default.find(filter)
-        .populate("instructor", "firstName lastName email avatar")
-        .sort("-createdAt")
-        .limit(Number(limit) || 50)
-        .skip(((Number(page) || 1) - 1) * (Number(limit) || 50));
-    const total = await Course_1.default.countDocuments(filter);
+    const queryStartedAt = Date.now();
+    const [courses, total] = await Promise.all([
+        Course_1.default.find(filter)
+            .populate("instructor", "firstName lastName email avatar")
+            .sort("-createdAt")
+            .limit(limitNum)
+            .skip((pageNum - 1) * limitNum)
+            .lean(),
+        Course_1.default.countDocuments(filter),
+    ]);
+    console.info(JSON.stringify({
+        event: "course_list_query",
+        durationMs: Date.now() - queryStartedAt,
+        resultCount: courses.length,
+    }));
+    if (filter.isPublished === true) {
+        res.setHeader("Cache-Control", "private, max-age=30");
+    }
     res.status(200).json({
         success: true,
         count: courses.length,
         total,
-        page: Number(page) || 1,
-        totalPages: Math.ceil(total / (Number(limit) || 50)),
+        page: pageNum,
+        totalPages: Math.ceil(total / limitNum),
         data: courses,
     });
 });

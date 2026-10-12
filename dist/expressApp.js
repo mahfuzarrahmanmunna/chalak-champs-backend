@@ -91,12 +91,28 @@ function createExpressApp() {
     // ==========================================
     // 4. DATABASE CONNECTION MIDDLEWARE
     // ==========================================
-    app.use("/api", async (req, _res, next) => {
+    app.use("/api", async (req, res, next) => {
+        const requestStartedAt = Date.now();
+        let dbConnectMs = null;
+        let dbConnectStartedAt = requestStartedAt;
+        res.once("finish", () => {
+            console.info(JSON.stringify({
+                event: "api_request",
+                method: req.method,
+                route: req.route?.path ? String(req.route.path) : "unmatched",
+                status: res.statusCode,
+                durationMs: Date.now() - requestStartedAt,
+                dbConnectMs,
+            }));
+        });
         try {
+            dbConnectStartedAt = Date.now();
             await (0, mongo_1.ensureMongoConnected)();
+            dbConnectMs = Date.now() - dbConnectStartedAt;
             next();
         }
         catch (e) {
+            dbConnectMs = Date.now() - dbConnectStartedAt;
             next(e);
         }
     });
