@@ -32,6 +32,7 @@ const progressRoutes_1 = __importDefault(require("./routes/progressRoutes"));
 const contactRoutes_1 = __importDefault(require("./routes/contactRoutes"));
 // ✅ NEW IMPORT
 const galleryRoutes_1 = __importDefault(require("./routes/galleryRoutes"));
+const trackingSettings_1 = __importDefault(require("./routes/trackingSettings"));
 function createExpressApp() {
     const app = (0, express_1.default)();
     // ==========================================
@@ -127,6 +128,7 @@ function createExpressApp() {
     app.use("/api/products", products_1.default);
     app.use("/api/courses", courses_1.default);
     app.use("/api/admin", admin_1.default); // ✅ Only declared ONCE, after body parsers
+    app.use("/api/tracking-settings", trackingSettings_1.default);
     app.use("/api/auth", auth_1.default);
     app.use("/api/contact", contactSheet_1.default);
     app.use("/api/freebooking", freeBookingRoutes_1.default);
@@ -145,7 +147,7 @@ function createExpressApp() {
     app.use("/api/manual-payments", manualPaymentRoutes_1.default);
     app.use("/api/courses", progressRoutes_1.default);
     app.use("/api/contact", contactRoutes_1.default);
-    // ✅ NEW GALLERY ROUTE ADDED HERE
+    // NEW GALLERY ROUTE ADDED HERE
     app.use("/api/gallery", galleryRoutes_1.default);
     // ==========================================
     // 7. HEALTH & ROOT ROUTES

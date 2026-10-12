@@ -15,6 +15,10 @@ import {
 import { protect } from "../middleware/auth";
 import { authorize } from "../middleware/roleAuth";
 import { getAdminCourses } from "../controllers/CourseController";
+import {
+  getAdminTrackingSettings,
+  updateTrackingSettings,
+} from "../controllers/trackingSettingsController";
 
 const router = Router();
 
@@ -48,5 +52,7 @@ router.put("/users/:id/permissions", authorize("admin"), updateUserPermissions);
 router.get("/dashboard/stats", authorize("admin"), getUserStats);
 router.get("/recent-courses", authorize("admin"), getRecentCourses);
 router.get("/courses", authorize("admin"), getAdminCourses);
+router.get("/tracking-settings", authorize("admin"), getAdminTrackingSettings);
+router.put("/tracking-settings", authorize("admin"), updateTrackingSettings);
 
 export default router;

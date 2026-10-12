@@ -28,6 +28,7 @@ import contactRoutes from "./routes/contactRoutes";
 
 // ✅ NEW IMPORT
 import galleryRoutes from "./routes/galleryRoutes";
+import trackingSettingsRoutes from "./routes/trackingSettings";
 
 export function createExpressApp() {
   const app = express();
@@ -152,6 +153,7 @@ export function createExpressApp() {
   app.use("/api/products", productRoutes);
   app.use("/api/courses", courseRoutes);
   app.use("/api/admin", adminRoutes); // ✅ Only declared ONCE, after body parsers
+  app.use("/api/tracking-settings", trackingSettingsRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/contact", contactSheetRoutes);
   app.use("/api/freebooking", freeBookingRoutes);
@@ -171,7 +173,7 @@ export function createExpressApp() {
   app.use("/api/courses", progressRoutes);
   app.use("/api/contact", contactRoutes);
   
-  // ✅ NEW GALLERY ROUTE ADDED HERE
+  // NEW GALLERY ROUTE ADDED HERE
   app.use("/api/gallery", galleryRoutes);
 
   // ==========================================

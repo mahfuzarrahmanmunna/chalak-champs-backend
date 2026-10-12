@@ -6,6 +6,7 @@ const adminController_1 = require("../controllers/adminController");
 const auth_1 = require("../middleware/auth");
 const roleAuth_1 = require("../middleware/roleAuth");
 const CourseController_1 = require("../controllers/CourseController");
+const trackingSettingsController_1 = require("../controllers/trackingSettingsController");
 const router = (0, express_1.Router)();
 // Protect all routes below this line
 router.use(auth_1.protect);
@@ -30,4 +31,6 @@ router.put("/users/:id/permissions", (0, roleAuth_1.authorize)("admin"), adminCo
 router.get("/dashboard/stats", (0, roleAuth_1.authorize)("admin"), adminController_1.getUserStats);
 router.get("/recent-courses", (0, roleAuth_1.authorize)("admin"), adminController_1.getRecentCourses);
 router.get("/courses", (0, roleAuth_1.authorize)("admin"), CourseController_1.getAdminCourses);
+router.get("/tracking-settings", (0, roleAuth_1.authorize)("admin"), trackingSettingsController_1.getAdminTrackingSettings);
+router.put("/tracking-settings", (0, roleAuth_1.authorize)("admin"), trackingSettingsController_1.updateTrackingSettings);
 exports.default = router;
