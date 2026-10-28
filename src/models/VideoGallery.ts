@@ -15,7 +15,7 @@ export interface IVideoGallery extends Document {
 
 const VideoItemSchema = new Schema<IVideoItem>({
   youtubeId: { type: String, required: true },
-  thumbnail: { type: String, required: true },
+  thumbnail: { type: String, default: "" },
   order: { type: Number, default: 0 },
   isActive: { type: Boolean, default: true },
 });

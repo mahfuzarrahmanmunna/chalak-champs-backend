@@ -10,6 +10,8 @@ interface VideoPayloadItem {
   isActive: boolean;
 }
 
+class ThumbnailUploadError extends Error {}
+
 // --- HELPERS ---
 const uploadToR2 = async (
   file: Express.Multer.File,
@@ -75,50 +77,80 @@ export const upsertVideoGallery = async (req: Request, res: Response) => {
     // 1. Parse incoming payload
     const parsedData = JSON.parse(req.body.data);
     const { title, subtitle, videos: incomingVideos } = parsedData;
+    if (
+      typeof title !== "string" ||
+      typeof subtitle !== "string" ||
+      !Array.isArray(incomingVideos)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid video gallery data",
+      });
+    }
 
     // Safely cast the files array since upload.array() ensures it's an array of Multer files
     const files = (req.files as Express.Multer.File[]) || [];
 
-    // 2. Fetch existing gallery to check for orphaned R2 images
+    // 3. Process uploads and map placeholders to real R2 URLs
+    let fileIndex = 0;
+    const processedVideos: IVideoItem[] = [];
+
+    for (const video of incomingVideos as VideoPayloadItem[]) {
+      let thumbnailUrl =
+        video.thumbnail === "__NEW_FILE__" ? "" : video.thumbnail || "";
+
+      if (video.thumbnail === "__NEW_FILE__") {
+        const file = files[fileIndex++];
+        if (!file) {
+          return res.status(400).json({
+            success: false,
+            message: "A selected thumbnail file was not received",
+          });
+        }
+
+        try {
+          thumbnailUrl = await uploadToR2(
+            file,
+            "video-gallery/thumbnails",
+          );
+        } catch (uploadError) {
+          console.error(
+            `[Upload] Failed to upload thumbnail for ${video.youtubeId}:`,
+            uploadError,
+          );
+          throw new ThumbnailUploadError("Failed to upload video thumbnail");
+        }
+      }
+
+      processedVideos.push({
+        youtubeId: video.youtubeId,
+        thumbnail: thumbnailUrl,
+        order: video.order || 0,
+        isActive: video.isActive !== false,
+      });
+    }
+
+    if (fileIndex !== files.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Received an unexpected number of thumbnail files",
+      });
+    }
+
+    // 4. Fetch existing gallery to check for orphaned R2 images
     const existingGallery = await VideoGallery.findOne();
     const existingThumbnails =
       existingGallery?.videos
         ?.map((v: IVideoItem) => v.thumbnail)
         .filter((url: string) => url && !url.startsWith("data:")) || [];
 
-    // 3. Process uploads and map placeholders to real R2 URLs
-    let fileIndex = 0;
-
-    const processedVideos: IVideoItem[] = await Promise.all(
-      incomingVideos.map(async (v: VideoPayloadItem): Promise<IVideoItem> => {
-        let thumbnailUrl =
-          v.thumbnail === "__NEW_FILE__" ? "" : v.thumbnail || "";
-
-        if (v.thumbnail === "__NEW_FILE__" && files[fileIndex]) {
-          try {
-            thumbnailUrl = await uploadToR2(
-              files[fileIndex],
-              "video-gallery/thumbnails",
-            );
-          } catch (uploadError) {
-            console.error(
-              `[Upload] Failed to upload thumbnail for ${v.youtubeId}:`,
-              uploadError,
-            );
-          }
-          fileIndex++;
-        }
-
-        return {
-          youtubeId: v.youtubeId,
-          thumbnail: thumbnailUrl,
-          order: v.order || 0,
-          isActive: v.isActive !== false,
-        };
-      }),
+    // 5. Save before cleaning up thumbnails no longer referenced by the gallery.
+    const updatedGallery = await VideoGallery.findOneAndUpdate(
+      {},
+      { title, subtitle, videos: processedVideos },
+      { new: true, upsert: true, runValidators: true },
     );
 
-    // 4. Clean up orphaned R2 thumbnails (if a user deleted a video or replaced an image)
     const newThumbnailUrls = processedVideos
       .map((v: IVideoItem) => v.thumbnail)
       .filter((url: string) => url);
@@ -141,22 +173,21 @@ export const upsertVideoGallery = async (req: Request, res: Response) => {
       });
     }
 
-    // 5. Save to database
-    const updatedGallery = await VideoGallery.findOneAndUpdate(
-      {},
-      { title, subtitle, videos: processedVideos },
-      { new: true, upsert: true, runValidators: true },
-    );
-
     res.status(200).json({ success: true, data: updatedGallery });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Handle JSON parse errors or validation errors safely
+    console.error("[Video Gallery] Failed to save gallery:", error);
+    const isInvalidJson = error instanceof SyntaxError;
     const message =
-      error instanceof SyntaxError
+      isInvalidJson
         ? "Invalid JSON payload"
-        : error.message || "Server Error";
+        : error instanceof ThumbnailUploadError
+          ? error.message
+          : "Failed to save video gallery";
 
-    res.status(500).json({ success: false, message });
+    res
+      .status(isInvalidJson ? 400 : error instanceof ThumbnailUploadError ? 502 : 500)
+      .json({ success: false, message });
   }
 };
 

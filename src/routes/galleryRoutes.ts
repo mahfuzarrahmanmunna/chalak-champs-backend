@@ -5,5 +5,6 @@ const router = Router();
 
 router.get("/", galleryController.getGallery);
 router.post("/", galleryController.upsertGallery);
+router.delete("/image", galleryController.deleteGalleryImage);
 
 export default router;

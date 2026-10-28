@@ -29,6 +29,10 @@ import contactRoutes from "./routes/contactRoutes";
 // ✅ NEW IMPORT
 import galleryRoutes from "./routes/galleryRoutes";
 import trackingSettingsRoutes from "./routes/trackingSettings";
+import admissionsRoutes from "./routes/admissions";
+import teacherAdminRoutes from "./routes/teacherAdminRoutes";
+import teacherPublicRoutes from "./routes/teacherPublicRoutes";
+
 
 export function createExpressApp() {
   const app = express();
@@ -153,6 +157,7 @@ export function createExpressApp() {
   app.use("/api/products", productRoutes);
   app.use("/api/courses", courseRoutes);
   app.use("/api/admin", adminRoutes); // ✅ Only declared ONCE, after body parsers
+  app.use("/api/admin/admissions", admissionsRoutes);
   app.use("/api/tracking-settings", trackingSettingsRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/contact", contactSheetRoutes);
@@ -172,9 +177,11 @@ export function createExpressApp() {
   app.use("/api/manual-payments", manualPaymentRoutes);
   app.use("/api/courses", progressRoutes);
   app.use("/api/contact", contactRoutes);
-  
+
   // NEW GALLERY ROUTE ADDED HERE
-  app.use("/api/gallery", galleryRoutes);
+  app.use("/api/gallery", galleryRoutes);  
+  app.use("/api/admin/teachers", teacherAdminRoutes);
+  app.use("/api/teachers", teacherPublicRoutes);
 
   // ==========================================
   // 7. HEALTH & ROOT ROUTES

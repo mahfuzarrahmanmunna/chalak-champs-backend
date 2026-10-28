@@ -1,20 +1,37 @@
-import { Router } from "express";
+import { ErrorRequestHandler, Router } from "express";
 import multer from "multer";
 import * as videoGalleryController from "../controllers/videoGalleryController";
 import { uploadVideoThumbnails } from "../middleware/upload";
 
 const router = Router();
 
-// Use memory storage so we can pass the buffer to R2Service
-const upload = multer({ storage: multer.memoryStorage() });
+const handleThumbnailUploadError: ErrorRequestHandler = (
+  error,
+  _req,
+  res,
+  next,
+) => {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
+  const message =
+    error instanceof Error ? error.message : "Invalid thumbnail upload";
+  const status =
+    error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE"
+      ? 413
+      : 400;
+
+  res.status(status).json({ success: false, message });
+};
 
 router.get("/", videoGalleryController.getVideoGallery);
 
-// ✅ FIX: Changed from upload.any() to upload.array("thumbnails")
-// This strictly looks for the "thumbnails" field and correctly types req.files as an array
 router.post(
   "/",
   uploadVideoThumbnails,
+  handleThumbnailUploadError,
   videoGalleryController.upsertVideoGallery,
 );
 

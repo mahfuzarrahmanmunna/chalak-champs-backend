@@ -2,35 +2,36 @@ import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest } from "../middleware/auth";
 import { catchAsync } from "../middleware/errorHandler";
-import Progress, { IProgress } from "../models/Progress";
+import Progress from "../models/Progress";
 import Module from "../models/Module";
+import Lesson from "../models/Lesson";
 
-// ✅ Define a local interface for the lean query to fix 'lessons' TS error
 interface IModuleLean {
   _id: mongoose.Types.ObjectId;
-  lessons: mongoose.Types.ObjectId[];
 }
 
-// Helper function with strict types to prevent TS(7034) and TS(2339)
 const getFlatLessons = async (
   courseId: string | string[],
 ): Promise<mongoose.Types.ObjectId[]> => {
   const normalizedCourseId = Array.isArray(courseId) ? courseId[0] : courseId;
 
-  const modules = await Module.find({ course: normalizedCourseId })
-    .sort("createdAt")
+  const modules = await Module.find({ courseId: normalizedCourseId })
+    .sort("order")
+    .select("_id")
     .lean<IModuleLean[]>();
 
-  const flatLessons: mongoose.Types.ObjectId[] = [];
+  const lessonsByModule = await Promise.all(
+    modules.map((mod) =>
+      Lesson.find({ module: mod._id })
+        .sort("order")
+        .select("_id")
+        .lean<{ _id: mongoose.Types.ObjectId }[]>(),
+    ),
+  );
 
-  for (const mod of modules) {
-    if (mod.lessons && Array.isArray(mod.lessons)) {
-      for (const lessonId of mod.lessons) {
-        flatLessons.push(lessonId);
-      }
-    }
-  }
-  return flatLessons;
+  return lessonsByModule.flatMap((lessons) =>
+    lessons.map((lesson) => lesson._id),
+  );
 };
 
 // @desc    Get Course Progress
@@ -50,17 +51,23 @@ export const getCourseProgress = catchAsync(
     const totalLessons = flatLessons.length;
 
     if (!progress) {
-      const firstModule = await Module.findOne({ course: courseId })
-        .sort("createdAt")
+      const firstModule = await Module.findOne({ courseId })
+        .sort("order")
+        .select("_id")
         .lean<IModuleLean | null>();
-      const firstLesson = firstModule?.lessons?.[0] ?? null;
+      const firstLesson = firstModule
+        ? await Lesson.findOne({ module: firstModule._id })
+            .sort("order")
+            .select("_id")
+            .lean<{ _id: mongoose.Types.ObjectId } | null>()
+        : null;
 
       progress = await Progress.create({
         user: userId,
         course: courseId,
         completedLessons: [],
         lastAccessedModule: firstModule?._id,
-        lastAccessedLesson: firstLesson,
+        lastAccessedLesson: firstLesson?._id,
         progressPercentage: 0,
       });
     }
@@ -123,7 +130,36 @@ export const markLessonComplete = catchAsync(
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
+    if (
+      !mongoose.Types.ObjectId.isValid(String(courseId)) ||
+      !mongoose.Types.ObjectId.isValid(String(moduleId)) ||
+      !mongoose.Types.ObjectId.isValid(String(lessonId))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course, module, or lesson ID.",
+      });
+    }
+
     const lessonObjectId = new mongoose.Types.ObjectId(String(lessonId));
+
+    const module = await Module.findOne({
+      _id: moduleId,
+      courseId,
+    })
+      .select("_id")
+      .lean();
+    const lesson = await Lesson.findOne({
+      _id: lessonObjectId,
+      module: moduleId,
+    })
+      .select("_id")
+      .lean();
+    if (!module || !lesson) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Lesson not found in course." });
+    }
 
     // Find or create progress document
     let progress = await Progress.findOne({ user: userId, course: courseId });
