@@ -70,6 +70,7 @@ export function createExpressApp() {
     );
   }
 
+  // ✅ FIX 1: Custom CORS middleware — added PATCH to allowed methods
   app.use((req, res, next) => {
     const origin = req.headers.origin as string | undefined;
     if (allowLocalhost || !origin || allowedOrigins.includes(origin)) {
@@ -78,7 +79,7 @@ export function createExpressApp() {
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader(
       "Access-Control-Allow-Methods",
-      "GET, POST, PUT, DELETE, OPTIONS",
+      "GET, POST, PUT, PATCH, DELETE, OPTIONS",  // ✅ ADDED PATCH
     );
     res.setHeader(
       "Access-Control-Allow-Headers",
@@ -91,6 +92,7 @@ export function createExpressApp() {
     next();
   });
 
+  // ✅ FIX 2: cors() middleware — added PATCH to methods array
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -102,7 +104,7 @@ export function createExpressApp() {
         );
       },
       credentials: true,
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],  // ✅ ADDED PATCH
       allowedHeaders: ["Content-Type", "Authorization"],
       optionsSuccessStatus: 200,
     }),
@@ -179,7 +181,7 @@ export function createExpressApp() {
   app.use("/api/contact", contactRoutes);
 
   // NEW GALLERY ROUTE ADDED HERE
-  app.use("/api/gallery", galleryRoutes);  
+  app.use("/api/gallery", galleryRoutes);
   app.use("/api/admin/teachers", teacherAdminRoutes);
   app.use("/api/teachers", teacherPublicRoutes);
 

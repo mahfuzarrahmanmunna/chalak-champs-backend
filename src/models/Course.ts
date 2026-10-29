@@ -110,10 +110,8 @@ export interface ICourseContent {
     title: IBilingualText;
     description: IBilingualText;
   };
-  // ✅ CHANGED: Single instructor → Multiple instructors
   instructorsTitle?: IBilingualText;
   instructors?: IInstructor[];
-  // ✅ KEPT for backward compatibility with old data
   instructor?: {
     title: IBilingualText;
     name: string;
@@ -162,6 +160,7 @@ export interface ICourse extends Document {
   thumbnail?: string;
   thumbnailDeleteUrl?: string;
   videoUrl?: string;
+  youtubeVideoUrl?: string;   // ✅ YouTube embed URL
   videoDeleteUrl?: string;
   quickInfo: any;
   offerDetails?: string;
@@ -198,6 +197,7 @@ const CourseSchema: Schema = new Schema(
     thumbnail: { type: String },
     thumbnailDeleteUrl: { type: String },
     videoUrl: { type: String },
+    youtubeVideoUrl: { type: String, default: "" },  // ✅ NEW — was missing
     videoDeleteUrl: { type: String },
     quickInfo: { type: Schema.Types.Mixed, default: {} },
     offerDetails: { type: String },

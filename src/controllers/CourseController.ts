@@ -166,6 +166,8 @@ export const createCourse = catchAsync(
         console.log("Video uploaded:", videoUrl);
       }
 
+
+
       // ====================================================================
       // ✅ NEW: Upload MULTIPLE Instructor Images to R2
       // ====================================================================
@@ -377,6 +379,7 @@ export const createCourse = catchAsync(
         duration: parseJSON(incoming.duration) || { en: "", bn: "" },
         thumbnail: thumbnailUrl,
         videoUrl: videoUrl,
+        youtubeVideoUrl: incoming.youtubeVideoUrl || "",  // ✅ NEW
         content: contentData,
         heroSubtitle: contentData.hero?.subtitle || title,
         description: contentData.overview?.content || { en: "", bn: "" },
@@ -386,8 +389,7 @@ export const createCourse = catchAsync(
         faqs: contentData.faq || [],
         instructor: user?._id || incoming.instructor,
         instructorName: incoming.instructorName || firstInstructorName,
-        isPublished:
-          incoming.isPublished === "true" || incoming.isPublished === true,
+        isPublished: incoming.isPublished === "true" || incoming.isPublished === true,
         publishedAt: new Date(),
       };
 
@@ -444,6 +446,8 @@ export const createCourse = catchAsync(
     }
   },
 );
+
+
 
 // ====================================================================
 // 2. GET ALL COURSES (Public)
@@ -850,6 +854,7 @@ export const updateCourse = catchAsync(
       }
 
       // Update simple fields
+            // Update simple fields
       if (req.body.slug !== undefined && req.body.slug !== course.slug) {
         course.slug = req.body.slug;
       }
@@ -873,6 +878,10 @@ export const updateCourse = catchAsync(
       if (req.body.instructorName) {
         course.instructorName = req.body.instructorName;
       }
+      // ✅ NEW: handle YouTube URL updates
+      if (req.body.youtubeVideoUrl !== undefined) {
+        course.youtubeVideoUrl = req.body.youtubeVideoUrl;
+      }
       if (req.body.isPublished !== undefined) {
         const isPublished =
           req.body.isPublished === "true" || req.body.isPublished === true;
@@ -881,7 +890,7 @@ export const updateCourse = catchAsync(
           ? course.publishedAt || new Date()
           : undefined;
       }
-
+      
       course.markModified("content");
 
       console.log("=== SAVING COURSE UPDATE ===");

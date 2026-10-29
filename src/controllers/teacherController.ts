@@ -43,6 +43,12 @@ function pickUpdateFields(body: any) {
     "awards", "childFocusedExperience", "teachingPhilosophy", "teachingApproach",
     "whyTeachChildren", "classFormat", "preferredLanguages", "portfolio",
     "availability",
+    // ✅ NEW: allow status fields to be saved via PUT (Save Profile button)
+    "verificationStatus",
+    "approvalStatus",
+    "approvalNote",
+    "isPublished",
+    "isActive",
   ];
   for (const k of allow) {
     if (body[k] !== undefined) (out as any)[k] = body[k];
@@ -316,6 +322,43 @@ export const uploadTeacherPhoto: RequestHandler = (req, res) => {
       res.status(500).json({ success: false, message: e?.message || "Server Error" });
     }
   });
+};
+
+
+// GET /api/admin/teachers/for-course-select
+// Lightweight list of approved teachers — optimized for the course instructor dropdown
+// GET /api/admin/teachers/for-course-select
+export const listTeachersForSelect: RequestHandler = async (req, res) => {
+  try {
+    const teachers = await TeacherProfile.find({
+      approvalStatus: "approved",
+      isActive: true,
+    })
+      .populate("user", "firstName lastName email role")
+      .select("displayName professionalTitle profilePhotoUrl subjects slug totalYearsExperience shortIntro biography awards education")
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      teachers: teachers.map((t: any) => ({
+        _id: t._id,
+        displayName: t.displayName,
+        professionalTitle: t.professionalTitle || "",
+        profilePhotoUrl: t.profilePhotoUrl || "",
+        subjects: t.subjects || [],
+        slug: t.slug,
+        totalYearsExperience: t.totalYearsExperience || 0,
+        shortIntro: t.shortIntro || "",
+        biography: t.biography || "",
+        awards: t.awards || [],
+        education: t.education || [],
+        user: t.user,
+      })),
+    });
+  } catch (e: any) {
+    console.error("listTeachersForSelect error:", e);
+    res.status(500).json({ success: false, message: e?.message || "Server Error" });
+  }
 };
 
 // POST /api/admin/teachers — create teacher profile for an eligible user
