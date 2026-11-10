@@ -55,7 +55,22 @@ export function createExpressApp() {
     "https://127.0.0.1:3000",
     "https://chalakchamps.vercel.app",
     "https://80a25253.chalakchamps-v2.pages.dev",
+    // Cloudflare Workers local preview (`npm run preview` in the client)
+    "http://localhost:8787",
+    "http://127.0.0.1:8787",
+    "https://chalak-champs-client.vercel.app",
+    // Extra origins from env, comma separated, e.g.
+    // CORS_ORIGINS=https://chalak-champs-client-new.myname.workers.dev,https://new.example.com
+    ...(process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()),
   ].filter((origin): origin is string => Boolean(origin));
+
+  // Any deployment of the Cloudflare Worker (https://chalak-champs-client-new.<account>.workers.dev)
+  const allowedOriginPatterns = [
+    /^https:\/\/chalak-champs-client-new\.[a-z0-9-]+\.workers\.dev$/,
+  ];
+  const isAllowedOrigin = (origin: string) =>
+    allowedOrigins.includes(origin) ||
+    allowedOriginPatterns.some((re) => re.test(origin));
 
   const isDevelopment = process.env.NODE_ENV !== "production";
   const allowLocalhost =
@@ -73,13 +88,13 @@ export function createExpressApp() {
   // ✅ FIX 1: Custom CORS middleware — added PATCH to allowed methods
   app.use((req, res, next) => {
     const origin = req.headers.origin as string | undefined;
-    if (allowLocalhost || !origin || allowedOrigins.includes(origin)) {
+    if (allowLocalhost || !origin || isAllowedOrigin(origin)) {
       res.setHeader("Access-Control-Allow-Origin", origin || "*");
     }
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader(
       "Access-Control-Allow-Methods",
-      "GET, POST, PUT, PATCH, DELETE, OPTIONS",  // ✅ ADDED PATCH
+      "GET, POST, PUT, PATCH, DELETE, OPTIONS",  
     );
     res.setHeader(
       "Access-Control-Allow-Headers",
@@ -97,7 +112,7 @@ export function createExpressApp() {
     cors({
       origin: (origin, callback) => {
         if (!origin || allowLocalhost) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
+        if (isAllowedOrigin(origin)) return callback(null, true);
         console.warn(`[CORS] Blocked origin: ${origin}`);
         return callback(
           new Error(`CORS policy does not allow access from origin ${origin}`),
@@ -239,7 +254,7 @@ export function createExpressApp() {
             : 500;
 
       const origin = req.headers.origin as string | undefined;
-      if (allowLocalhost || !origin || allowedOrigins.includes(origin || "")) {
+      if (allowLocalhost || !origin || isAllowedOrigin(origin)) {
         res.setHeader("Access-Control-Allow-Origin", origin || "*");
       }
 

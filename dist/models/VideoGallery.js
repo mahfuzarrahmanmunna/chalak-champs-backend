@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const VideoItemSchema = new mongoose_1.Schema({
     youtubeId: { type: String, required: true },
-    thumbnail: { type: String, required: true },
+    thumbnail: { type: String, default: "" },
     order: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
 });

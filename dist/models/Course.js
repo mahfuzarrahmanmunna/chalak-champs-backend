@@ -72,6 +72,7 @@ const CourseSchema = new mongoose_1.Schema({
     thumbnail: { type: String },
     thumbnailDeleteUrl: { type: String },
     videoUrl: { type: String },
+    youtubeVideoUrl: { type: String, default: "" }, // ✅ NEW — was missing
     videoDeleteUrl: { type: String },
     quickInfo: { type: mongoose_1.Schema.Types.Mixed, default: {} },
     offerDetails: { type: String },

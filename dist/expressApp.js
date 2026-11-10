@@ -33,6 +33,9 @@ const contactRoutes_1 = __importDefault(require("./routes/contactRoutes"));
 // ✅ NEW IMPORT
 const galleryRoutes_1 = __importDefault(require("./routes/galleryRoutes"));
 const trackingSettings_1 = __importDefault(require("./routes/trackingSettings"));
+const admissions_1 = __importDefault(require("./routes/admissions"));
+const teacherAdminRoutes_1 = __importDefault(require("./routes/teacherAdminRoutes"));
+const teacherPublicRoutes_1 = __importDefault(require("./routes/teacherPublicRoutes"));
 function createExpressApp() {
     const app = (0, express_1.default)();
     // ==========================================
@@ -52,36 +55,51 @@ function createExpressApp() {
         "https://127.0.0.1:3000",
         "https://chalakchamps.vercel.app",
         "https://80a25253.chalakchamps-v2.pages.dev",
+        // Cloudflare Workers local preview (`npm run preview` in the client)
+        "http://localhost:8787",
+        "http://127.0.0.1:8787",
+        "https://chalak-champs-client.vercel.app",
+        // Extra origins from env, comma separated, e.g.
+        // CORS_ORIGINS=https://chalak-champs-client-new.myname.workers.dev,https://new.example.com
+        ...(process.env.CORS_ORIGINS || "").split(",").map((o) => o.trim()),
     ].filter((origin) => Boolean(origin));
+    // Any deployment of the Cloudflare Worker (https://chalak-champs-client-new.<account>.workers.dev)
+    const allowedOriginPatterns = [
+        /^https:\/\/chalak-champs-client-new\.[a-z0-9-]+\.workers\.dev$/,
+    ];
+    const isAllowedOrigin = (origin) => allowedOrigins.includes(origin) ||
+        allowedOriginPatterns.some((re) => re.test(origin));
     const isDevelopment = process.env.NODE_ENV !== "production";
     const allowLocalhost = process.env.ALLOW_LOCALHOST_ORIGINS === "true" || isDevelopment;
     if (allowLocalhost) {
         allowedOrigins.push("http://localhost:3000", "http://127.0.0.1:3000", "https://localhost:3000", "https://127.0.0.1:3000");
     }
+    // ✅ FIX 1: Custom CORS middleware — added PATCH to allowed methods
     app.use((req, res, next) => {
         const origin = req.headers.origin;
-        if (allowLocalhost || !origin || allowedOrigins.includes(origin)) {
+        if (allowLocalhost || !origin || isAllowedOrigin(origin)) {
             res.setHeader("Access-Control-Allow-Origin", origin || "*");
         }
         res.setHeader("Access-Control-Allow-Credentials", "true");
-        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
         res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
         if (req.method === "OPTIONS") {
             return res.sendStatus(200);
         }
         next();
     });
+    // ✅ FIX 2: cors() middleware — added PATCH to methods array
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
             if (!origin || allowLocalhost)
                 return callback(null, true);
-            if (allowedOrigins.includes(origin))
+            if (isAllowedOrigin(origin))
                 return callback(null, true);
             console.warn(`[CORS] Blocked origin: ${origin}`);
             return callback(new Error(`CORS policy does not allow access from origin ${origin}`));
         },
         credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // ✅ ADDED PATCH
         allowedHeaders: ["Content-Type", "Authorization"],
         optionsSuccessStatus: 200,
     }));
@@ -128,6 +146,7 @@ function createExpressApp() {
     app.use("/api/products", products_1.default);
     app.use("/api/courses", courses_1.default);
     app.use("/api/admin", admin_1.default); // ✅ Only declared ONCE, after body parsers
+    app.use("/api/admin/admissions", admissions_1.default);
     app.use("/api/tracking-settings", trackingSettings_1.default);
     app.use("/api/auth", auth_1.default);
     app.use("/api/contact", contactSheet_1.default);
@@ -149,6 +168,8 @@ function createExpressApp() {
     app.use("/api/contact", contactRoutes_1.default);
     // NEW GALLERY ROUTE ADDED HERE
     app.use("/api/gallery", galleryRoutes_1.default);
+    app.use("/api/admin/teachers", teacherAdminRoutes_1.default);
+    app.use("/api/teachers", teacherPublicRoutes_1.default);
     // ==========================================
     // 7. HEALTH & ROOT ROUTES
     // ==========================================
@@ -190,7 +211,7 @@ function createExpressApp() {
                 ? 403
                 : 500;
         const origin = req.headers.origin;
-        if (allowLocalhost || !origin || allowedOrigins.includes(origin || "")) {
+        if (allowLocalhost || !origin || isAllowedOrigin(origin)) {
             res.setHeader("Access-Control-Allow-Origin", origin || "*");
         }
         res.status(statusCode).json({

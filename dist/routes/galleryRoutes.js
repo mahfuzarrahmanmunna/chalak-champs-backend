@@ -38,4 +38,5 @@ const galleryController = __importStar(require("../controllers/galleryController
 const router = (0, express_1.Router)();
 router.get("/", galleryController.getGallery);
 router.post("/", galleryController.upsertGallery);
+router.delete("/image", galleryController.deleteGalleryImage);
 exports.default = router;

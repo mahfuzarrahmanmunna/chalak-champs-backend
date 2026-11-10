@@ -291,6 +291,7 @@ exports.createCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
             duration: parseJSON(incoming.duration) || { en: "", bn: "" },
             thumbnail: thumbnailUrl,
             videoUrl: videoUrl,
+            youtubeVideoUrl: incoming.youtubeVideoUrl || "", // ✅ NEW
             content: contentData,
             heroSubtitle: contentData.hero?.subtitle || title,
             description: contentData.overview?.content || { en: "", bn: "" },
@@ -694,6 +695,7 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
                 updatedInstructors[0].name || course.instructorName;
         }
         // Update simple fields
+        // Update simple fields
         if (req.body.slug !== undefined && req.body.slug !== course.slug) {
             course.slug = req.body.slug;
         }
@@ -717,6 +719,10 @@ exports.updateCourse = (0, errorHandler_1.catchAsync)(async (req, res) => {
         }
         if (req.body.instructorName) {
             course.instructorName = req.body.instructorName;
+        }
+        // ✅ NEW: handle YouTube URL updates
+        if (req.body.youtubeVideoUrl !== undefined) {
+            course.youtubeVideoUrl = req.body.youtubeVideoUrl;
         }
         if (req.body.isPublished !== undefined) {
             const isPublished = req.body.isPublished === "true" || req.body.isPublished === true;
