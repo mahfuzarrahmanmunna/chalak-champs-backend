@@ -11,6 +11,7 @@ export interface IHero extends Document {
   kingImage?: string;
   kingImageClass?: string; // NEW
   videoId?: string;        // NEW
+  videoThumbnail?: string; // Custom video thumbnail (Cloudflare R2 public URL)
 }
 
 const HeroSchema: Schema = new Schema(
@@ -25,6 +26,7 @@ const HeroSchema: Schema = new Schema(
     kingImage: { type: String, required: false },
     kingImageClass: { type: String, required: false }, // NEW
     videoId: { type: String, required: false },        // NEW
+    videoThumbnail: { type: String, required: false, default: "" },
   },
   { timestamps: true }
 );
